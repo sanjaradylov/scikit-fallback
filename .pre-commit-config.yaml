@@ -1,0 +1,62 @@
+repos:
+# 🐍 Some out-of-the-box hooks.
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+    -   id: check-added-large-files
+        args:
+          [
+            --maxkb=1000,
+          ]
+    -   id: check-case-conflict
+    -   id: check-docstring-first
+    -   id: check-merge-conflict
+    -   id: check-toml
+    -   id: check-yaml
+        args: [--allow-multiple-documents]
+    -   id: end-of-file-fixer
+    -   id: mixed-line-ending
+        args:
+          [
+            --fix=lf,
+          ]
+    -   id: name-tests-test
+        args:
+          [
+            --pytest-test-first,
+          ]
+    -   id: trailing-whitespace
+# 🐍🖤 Formatting python code uncompromisingly.
+-   repo: https://github.com/psf/black
+    rev: 24.4.2
+    hooks:
+    -   id: black
+# 🐍🦥 Enforce docstrings in python code.
+-   repo: https://github.com/econchick/interrogate
+    rev: 1.7.0
+    hooks:
+      - id: interrogate
+        args:
+          [
+            "skfb/",
+          ]
+# 🏘 Local hooks.
+-   repo: local
+    hooks:
+    # 🐍❗️ Analyze python code with pylint.
+    -   id: pylint
+        name: pylint
+        entry: pylint
+        language: system
+        types: [python]
+        args:
+          [
+            --rcfile=./pyproject.toml,
+          ]
+    # 🐍🧪 Test custom components.
+    -   id: pytest
+        name: pytest
+        entry: pytest
+        language: system
+        types: [python]
+        pass_filenames: false
