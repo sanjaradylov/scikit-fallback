@@ -22,10 +22,11 @@ class PAConfusionMatrixDisplay(ConfusionMatrixDisplay):
     ----------
     confusion_matrix : ndarray of shape (2, 2)
         Predict-accept confusion matrix.
-
     display_labels : ndarray of shape (n_classes,), default=("No", "Yes")
         Display labels for plot. If None, display labels are set from 0 to
         `n_classes - 1`.
+    fallback_rate : float, default=None
+        Ratio of rejected samples to all samples.
 
     See Also
     --------
@@ -43,8 +44,16 @@ class PAConfusionMatrixDisplay(ConfusionMatrixDisplay):
         Adapted from :class:`~sklearn.metrics.ConfusionMatrixDisplay`.
     """
 
-    def __init__(self, confusion_matrix, *, display_labels=("No", "Yes")):
+    def __init__(
+        self,
+        confusion_matrix,
+        *,
+        display_labels=("No", "Yes"),
+        fallback_rate=None,
+    ):
         super().__init__(confusion_matrix, display_labels=display_labels)
+
+        self.fallback_rate = fallback_rate
 
     def plot(
         self,
@@ -114,6 +123,12 @@ class PAConfusionMatrixDisplay(ConfusionMatrixDisplay):
 
         self.ax_.set_xlabel("Accepted?")
         self.ax_.set_ylabel("Predicted correctly?")
+
+        title = "Predict-Accept Confusion Matrix"
+        if self.fallback_rate is not None:
+            title += f"\n(fallback rate = {self.fallback_rate * 100.0:.2f}%)"
+
+        self.ax_.set_title(title)
 
         return self
 
@@ -338,7 +353,11 @@ class PAConfusionMatrixDisplay(ConfusionMatrixDisplay):
             normalize=normalize,
         )
 
-        disp = cls(confusion_matrix=cm, display_labels=display_labels)
+        disp = cls(
+            confusion_matrix=cm,
+            display_labels=display_labels,
+            fallback_rate=y_pred.fallback_rate,
+        )
 
         return disp.plot(
             include_values=include_values,
