@@ -7,3 +7,5 @@ a reject option.
 
 * [plot_confusion_matrix.py](./plot_confusion_matrix.py): learn to reject low-confidence
   MNIST images and plot predict-accept confusion matrix.
+* [plot_decision_boundary.py](./plot_decision_boundary.py): plot the regions where
+  samples from `make_moons` are rejected by a simple `ThresholdFallbackClassifier`.
