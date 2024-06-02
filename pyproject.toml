@@ -7,7 +7,7 @@ name = "scikit-fallback"
 version = "0.0.0dev0"
 description = "Machine learning with a reject option"
 license = { file = "LICENSE" }
-readme = "README.rst"
+readme = "README.md"
 requires-python = ">=3.8"
 authors = [
     { name = "Sanjar Ad[yi]lov"},
