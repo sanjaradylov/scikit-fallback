@@ -9,11 +9,15 @@ with a reject option.
 
 ### Usage
 ```python
-from skfb.estimators import RateFallbackClassifier
+from skfb.estimators import RateFallbackClassifierCV
 from skfb.metrics import
 from sklearn.linear_model import LogisticRegression
 
-rejector = RateFallbackClassifier(LogisticRegression(), fallback_rate=0.05, cv=5)
+rejector = RateFallbackClassifierCV(
+    LogisticRegression(),
+    fallback_rates=[0.05, 0.07],
+    cv=5,
+)
 rejector.fit(X_train, y_train)
 y_pred = rejector.predict(X_test)
 print(predict_reject_accuracy_score(y_test, y_pred))

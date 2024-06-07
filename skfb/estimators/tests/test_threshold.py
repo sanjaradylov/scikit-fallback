@@ -7,7 +7,7 @@ import pytest
 
 from skfb.estimators import (
     predict_or_fallback,
-    RateFallbackClassifier,
+    RateFallbackClassifierCV,
     ThresholdFallbackClassifier,
     ThresholdFallbackClassifierCV,
 )
@@ -199,16 +199,16 @@ def test_threshold_fallback_classifier_cv(y_true, y_comb, fallback_label):
     ],
 )
 def test_rate_fallback_classifier(y_true, y_comb, fallback_label):
-    """Tests fit, predict, and attrs of ``RateFallbackClassifier``."""
+    """Tests fit, predict, and attrs of ``RateFallbackClassifierCV``."""
     X_accept = [[0, 0], [6, 6], [0, 1], [5, 6], [1, 1], [5, 5], [1, 0], [6, 5]]
     X_ambiguous = [[3.25, 3], [3.0, 3.25]]
     X = np.array(X_accept + X_ambiguous)
 
     estimator = LogisticRegression(random_state=0)
-    fallback_rate = 0.2
+    fallback_rates = [0.2]
     cv = 2
 
-    rejector = RateFallbackClassifier(estimator, fallback_rate=fallback_rate, cv=cv)
+    rejector = RateFallbackClassifierCV(estimator, fallback_rates=fallback_rates, cv=cv)
     rejector.set_params(fallback_label=fallback_label).fit(X, y_true)
 
     for key in ["cv_", "estimator_", "threshold_", "thresholds_"]:

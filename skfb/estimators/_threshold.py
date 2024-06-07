@@ -675,7 +675,7 @@ def _find_threshold(estimator, X_train, X_test, y_train, fallback_rate):
     return np.quantile(y_prob, fallback_rate)
 
 
-class RateFallbackClassifier(BaseFallbackClassifier):
+class RateFallbackClassifierCV(BaseFallbackClassifier):
     """Fallback classifier learning a threshold based on the provided fallback rate.
 
     The threshold is determined during training via cross-validation and equals to the
@@ -686,7 +686,7 @@ class RateFallbackClassifier(BaseFallbackClassifier):
     ----------
     estimator : object
         The base estimator supporting probabilistic predictions.
-    fallback_rate : float, default=0.1
+    fallback_rates : array-like of float, default=(0.1,)
         The rate of rejected test samples.
     cv : int, cross-validation generator or an iterable, default=None
         Determines the cross-validation splitting strategy.
@@ -712,15 +712,15 @@ class RateFallbackClassifier(BaseFallbackClassifier):
     --------
     >>> import numpy as np
     >>> from sklearn.linear_model import LogisticRegression
-    >>> from skfb.estimators import RateFallbackClassifier
+    >>> from skfb.estimators import RateFallbackClassifierCV
     >>> estimator = LogisticRegression(random_state=0)
     >>> X_accept = [[0, 0], [6, 6], [0, 1], [5, 6], [1, 1], [5, 5], [1, 0], [6, 5]]
     >>> X_ambiguous = [[3.25, 3], [3., 3.25]]
     >>> X = np.array(X_accept + X_ambiguous)
     >>> y = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
-    >>> rejector = RateFallbackClassifier(
+    >>> rejector = RateFallbackClassifierCV(
     ...     estimator,
-    ...     fallback_rate=0.2,
+    ...     fallback_rates=(0.2,),
     ...     cv=2,
     ...     fallback_label=-1,
     ...     fallback_mode="return")
@@ -733,7 +733,7 @@ class RateFallbackClassifier(BaseFallbackClassifier):
     _parameter_constraints = {**BaseFallbackClassifier._parameter_constraints}
     _parameter_constraints.update(
         {
-            "fallback_rate": [Interval(Real, 0.0, 1.0, closed="both")],
+            "fallback_rates": ["array-like", Interval(Real, 0.0, 1.0, closed="both")],
             "cv": ["cv_object"],
             "scoring": [callable, None],
             "n_jobs": [Interval(Integral, -1, None, closed="left"), None],
@@ -744,7 +744,7 @@ class RateFallbackClassifier(BaseFallbackClassifier):
         self,
         estimator,
         *,
-        fallback_rate=0.1,
+        fallback_rates=(0.1,),
         cv=None,
         n_jobs=None,
         verbose=0,
@@ -757,7 +757,7 @@ class RateFallbackClassifier(BaseFallbackClassifier):
             fallback_mode=fallback_mode,
         )
 
-        self.fallback_rate = fallback_rate
+        self.fallback_rates = fallback_rates
         self.cv = cv
         self.n_jobs = n_jobs
         self.verbose = verbose
@@ -779,8 +779,9 @@ class RateFallbackClassifier(BaseFallbackClassifier):
                 X[train_idx],
                 X[test_idx],
                 y[train_idx],
-                self.fallback_rate,
+                fallback_rate,
             )
+            for fallback_rate in self.fallback_rates
             for train_idx, test_idx in cv_.split(X, y)
         )
         set_attributes.update(

@@ -2,14 +2,14 @@
 
 __all__ = (
     "predict_or_fallback",
-    "RateFallbackClassifier",
+    "RateFallbackClassifierCV",
     "ThresholdFallbackClassifier",
     "ThresholdFallbackClassifierCV",
 )
 
 from ._threshold import (
     predict_or_fallback,
-    RateFallbackClassifier,
+    RateFallbackClassifierCV,
     ThresholdFallbackClassifier,
     ThresholdFallbackClassifierCV,
 )
