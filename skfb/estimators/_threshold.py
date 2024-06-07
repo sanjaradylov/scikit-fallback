@@ -317,6 +317,23 @@ class BaseFallbackClassifier(
         return prediction_quality(y, y_pred, accuracy_score, self.fallback_label_)
 
 
+def _top_2(scores):
+    """Returns top 2 scores."""
+    return np.sort(scores)[-2:]
+
+
+def _are_top_2_close(y_score, ambiguity_threshold):
+    """Whether the scores of top two classes are lower than the ambiguity threshold."""
+    y_top_2 = np.apply_along_axis(_top_2, 1, y_score)
+    y_diff = np.apply_over_axes(np.diff, y_top_2, 1)
+    return y_diff[:, 0] < ambiguity_threshold
+
+
+def _is_top_low(y_score, threshold):
+    """Whether the top confidence score is lower than the threshold."""
+    return y_score.max(axis=1) < threshold
+
+
 @validate_params(
     {
         "estimator": [HasMethods(["fit", "predict_proba"])],
@@ -332,6 +349,7 @@ def predict_or_fallback(
     X,
     classes,
     threshold=0.5,
+    ambiguity_threshold=0.0,
     fallback_label=-1,
     fallback_mode="return",
 ):
@@ -347,6 +365,8 @@ def predict_or_fallback(
         NDArray of class labels.
     threshold : float, default=0.5
         Predictions w/ the lower thresholds are rejected.
+    ambiguity_threshold : float, default=0.0
+        Predictions w/ the close top 2 scores are rejected.
     fallback_label : any, default=-1
         Rejected samples are labeled w/ this label.
     fallback_mode : {"store", "return"}, default="return"
@@ -356,7 +376,9 @@ def predict_or_fallback(
         and rejections.
     """
     y_prob = estimator.predict_proba(X)
-    fallback_mask = y_prob.max(axis=1) < threshold
+    fallback_mask = _is_top_low(y_prob, threshold)
+    if ambiguity_threshold > 0.0:
+        fallback_mask |= _are_top_2_close(y_prob, ambiguity_threshold)
 
     if fallback_mode == "return":
         acceptance_mask = ~fallback_mask
@@ -379,6 +401,8 @@ class ThresholdFallbackClassifier(BaseFallbackClassifier):
         The base estimator making decisions w/o fallbacks.
     threshold : float, default=0.5
         The fallback threshold.
+    ambiguity_threshold : float, default=0.0
+        Predictions w/ the close top 2 scores are rejected.
     fallback_label : any, default=-1
         The label of a rejected example.
         Should be compatible w/ the class labels from training data.
@@ -411,6 +435,7 @@ class ThresholdFallbackClassifier(BaseFallbackClassifier):
     _parameter_constraints.update(
         {
             "threshold": [Interval(Real, 0.0, 1.0, closed="both")],
+            "ambiguity_threshold": [Interval(Real, 0.0, 1.0, closed="both")],
         },
     )
 
@@ -419,6 +444,7 @@ class ThresholdFallbackClassifier(BaseFallbackClassifier):
         estimator,
         *,
         threshold=0.5,
+        ambiguity_threshold=0.0,
         fallback_label=-1,
         fallback_mode="store",
     ):
@@ -428,6 +454,7 @@ class ThresholdFallbackClassifier(BaseFallbackClassifier):
             fallback_mode=fallback_mode,
         )
         self.threshold = threshold
+        self.ambiguity_threshold = ambiguity_threshold
 
     def _predict(self, X):
         """Predicts classes based on the fixed certainty threshold."""
@@ -436,6 +463,7 @@ class ThresholdFallbackClassifier(BaseFallbackClassifier):
             X,
             self.classes_,
             threshold=self.threshold,
+            ambiguity_threshold=self.ambiguity_threshold,
             fallback_label=self.fallback_label_,
             fallback_mode=self.fallback_mode,
         )
@@ -460,6 +488,7 @@ def _scoring_path(
     estimator = ThresholdFallbackClassifier(
         clone(base_estimator),
         threshold=threshold,
+        ambiguity_threshold=0.0,
         fallback_label=fallback_label,
         fallback_mode=fallback_mode,
     )
@@ -476,6 +505,8 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
         The base estimator making decisions.
     thresholds : array-like of shape (n_thresholds,), default=(0.1, 0.5, 0.9)
         Array of fallback thresholds to evaluate.
+    ambiguity_threshold : float, default=0.0
+        Predictions w/ the close top 2 scores are rejected.
     cv : int, cross-validation generator or an iterable, default=None
         Determines the cross-validation splitting strategy.
         Possible inputs for cv are:
@@ -548,6 +579,7 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
         estimator,
         *,
         thresholds=(0.1, 0.5, 0.9),
+        ambiguity_threshold=0.0,
         cv=None,
         scoring=None,
         n_jobs=None,
@@ -557,6 +589,7 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
     ):
         super().__init__(
             estimator=estimator,
+            ambiguity_threshold=ambiguity_threshold,
             fallback_label=fallback_label,
             fallback_mode=fallback_mode,
         )

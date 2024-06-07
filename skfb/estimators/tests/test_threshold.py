@@ -6,10 +6,56 @@ import numpy as np
 import pytest
 
 from skfb.estimators import (
+    predict_or_fallback,
     RateFallbackClassifier,
     ThresholdFallbackClassifier,
     ThresholdFallbackClassifierCV,
 )
+
+
+class TestFallbackEstimator:
+    """Accepts and returns the same probability scores."""
+
+    # pylint: disable=unused-argument
+    def fit(self, X_unused=None, y_unused=None):
+        self.is_fitted_ = True
+        return self
+
+    def predict_proba(self, y):
+        return y
+
+
+@pytest.mark.parametrize(
+    "y_score, y_true, threshold, ambiguity_threshold",
+    [
+        (
+            np.array([[0.1, 0.2, 0.7], [0.33, 0.33, 0.34], [0.0, 1.0, 0.0]]),
+            np.array([-1, -1, 1]),
+            0.8,
+            0.05,
+        ),
+        (
+            np.array([[0.099, 0.4, 0.501], [0.495, 0.4, 0.105], [0.4, 0.5, 0.1]]),
+            np.array([2, -1, -1]),
+            0.2,
+            0.1,
+        ),
+    ],
+)
+def test_predict_or_fallback(y_score, y_true, threshold, ambiguity_threshold):
+    """Tests ``predict_or_fallback``."""
+    rejector = TestFallbackEstimator()
+    rejector.fit()
+    classes = np.array([0, 1, 2])
+
+    y_pred = predict_or_fallback(
+        rejector,
+        y_score,
+        classes,
+        threshold=threshold,
+        ambiguity_threshold=ambiguity_threshold,
+    )
+    np.testing.assert_array_equal(y_true, y_pred)
 
 
 @pytest.mark.parametrize(
