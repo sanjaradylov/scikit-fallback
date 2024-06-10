@@ -1,12 +1,36 @@
 """Fallback-based visualizations"""
 
 from sklearn.metrics import accuracy_score, auc, ConfusionMatrixDisplay
-from sklearn.utils import check_consistent_length, check_matplotlib_support
+from sklearn.utils import check_consistent_length
 from sklearn.utils.validation import check_is_fitted
 
 from ..estimators.base import is_rejector
 from ._classification import predict_accept_confusion_matrix
 from ._ranking import fallback_quality_curve
+
+
+def check_matplotlib_support(caller_name):
+    """Raise ImportError with detailed error message if mpl is not installed.
+
+    Plot utilities like any of the Display's plotting functions should lazily import
+    matplotlib and call this helper before any computation.
+
+    Parameters
+    ----------
+    caller_name : str
+        The name of the caller that requires matplotlib.
+
+    References:
+        sklearn.utils._optional_dependencies.check_matplotlib_support
+    """
+    try:
+        # pylint: disable=import-outside-toplevel,unused-import
+        import matplotlib
+    except ImportError as e:
+        raise ImportError(
+            f"{caller_name} requires matplotlib. You can install matplotlib with "
+            "`pip install matplotlib`"
+        ) from e
 
 
 class PAConfusionMatrixDisplay(ConfusionMatrixDisplay):
@@ -565,21 +589,24 @@ class PairedHistogramDisplay:
 
         self.ax_.hist(
             self.score_true,
-            histtype="stepfilled",
+            histtype="step",
             cumulative=cumulative,
             label="Correct",
-            alpha=0.4,
         )
         self.ax_.hist(
             self.score_false,
-            histtype="stepfilled",
+            histtype="step",
             cumulative=cumulative,
             label="Incorrect",
-            alpha=0.4,
         )
         self.ax_.legend()
+        self.ax_.grid(visible=True)
+        if cumulative:
+            self.ax_.set_title("Cumulative distributions of top scores")
+        else:
+            self.ax_.set_title("Distributions of top scores")
         self.ax_.set_xlabel("Confidence scores")
-        self.ax_.set_ylabel("Nubmer of examples")
+        self.ax_.set_ylabel("Number of examples")
 
         return self
 

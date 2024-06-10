@@ -4,10 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scikit-fallback"
-version = "0.0.0dev0"
 description = "Machine learning with a reject option"
 license = { file = "LICENSE" }
-readme = "README.md"
+readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.8"
 authors = [
     { name = "Sanjar Ad[yi]lov"},
@@ -17,18 +16,29 @@ maintainers = [
 ]
 dependencies = [
     "scikit-learn>=1.0",
-    "matplotlib>=3.0",
 ]
+dynamic = ["version"]
+
+[tool.setuptools.dynamic]
+version = {attr = "skfb.__version__"}
+
+[project.urls]
+Homepage = "https://github.com/sanjaradylov/scikit-fallback"
 
 [project.optional-dependencies]
+
 tests = [
     "black>=24.4.0",
+    "matplotlib>=3.0",
     "pre-commit>=3.7.0",
     "pylint>=3.1.0",
     "pytest>=8.0",
 ]
 dev = [
     "jupyterlab",
+]
+examples = [
+    "matplotlib>=3.0",
 ]
 
 # 🔨 Setuptools configuration
