@@ -36,7 +36,9 @@ def generate_random_combination(X):
 
 
 # region Get dataset
-X, y = fetch_openml("mnist_784", version=1, return_X_y=True, as_frame=False)
+X, y = fetch_openml(
+    "mnist_784", version=1, return_X_y=True, as_frame=False, parser="liac-arff"
+)
 X_train, X_test, y_train, y_test = train_test_split(
     X,
     y,

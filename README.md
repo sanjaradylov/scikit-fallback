@@ -1,4 +1,5 @@
 ![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)
+[![PythonVersion](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue)](https://www.python.org/downloads/release/python-3913/)
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![linting: pylint](https://img.shields.io/badge/linting-pylint-yellowgreen)](https://github.com/PyCQA/pylint)
 
@@ -10,7 +11,7 @@ with a reject option.
 ### Usage
 ```python
 from skfb.estimators import RateFallbackClassifierCV
-from skfb.metrics import
+from skfb.metrics import predict_reject_accuracy_score
 from sklearn.linear_model import LogisticRegression
 
 rejector = RateFallbackClassifierCV(
@@ -25,8 +26,8 @@ print(predict_reject_accuracy_score(y_test, y_pred))
 
 ### Installation
 `scikit-fallback` requires:
-* scikit-learn (>=1.0)
-* matplotlib (>=1.0)
+* Python (>=3.9,< 3.13)
+* scikit-learn (>=1.3)
 
 ### Examples
 
