@@ -1,7 +1,7 @@
 ![PyPi](https://img.shields.io/pypi/v/scikit-fallback)
 ![Python package workflow](https://github.com/sanjaradylov/scikit-fallback/actions/workflows/python-package.yml/badge.svg)
 ![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)
-[![PythonVersion](https://img.shields.io/badge/python-3.8%20%7C%203.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue)](https://www.python.org/downloads/release/python-3913/)
+[![PythonVersion](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue)](https://www.python.org/downloads/release/python-3913/)
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![linting: pylint](https://img.shields.io/badge/linting-pylint-yellowgreen)](https://github.com/PyCQA/pylint)
 
@@ -11,7 +11,7 @@ with a reject option.
 
 ### 🏗 Installation
 `scikit-fallback` requires:
-* Python (>=3.8,< 3.13)
+* Python (>=3.9,< 3.13)
 * scikit-learn (>=1.3)
 * matplotlib (>=3.0) (optional)
 
