@@ -316,11 +316,10 @@ class BaseFallbackClassifier(
         --------
         skfb.metrics.predict_reject_accuracy_score
         """
+        # ??? Is it the right way to overcome circular imports?
         # pylint: disable=import-outside-toplevel
-        from ..metrics._classification import (
-            prediction_quality,
-            predict_reject_accuracy_score,
-        )
+        from ..metrics._classification import predict_reject_accuracy_score
+        from ..metrics._common import prediction_quality
 
         y_pred = self.predict(X)
         if self.fallback_mode == "store":
