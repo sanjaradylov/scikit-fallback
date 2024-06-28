@@ -2,8 +2,8 @@
 name: Pull request
 about: Suggest an idea for this project
 title: ''
-labels: 
-assignees: 
+labels:
+assignees:
 ---
 
 Resolves #ISSUE_NUMBER
