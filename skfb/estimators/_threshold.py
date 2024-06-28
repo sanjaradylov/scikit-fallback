@@ -470,7 +470,9 @@ class ThresholdFallbackClassifier(BaseFallbackClassifier):
 
     def _set_fallback_mask(self, y_prob):
         """Sets the fallback mask for predicted probabilites."""
-        y_prob.fallback_mask = y_prob.max(axis=1) < self.threshold
+        y_prob.fallback_mask = _is_top_low(y_prob, self.threshold) | _are_top_2_close(
+            y_prob, self.ambiguity_threshold
+        )
 
 
 def _scoring_path(
@@ -666,7 +668,9 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
 
     def _set_fallback_mask(self, y_prob):
         """Sets the fallback mask for predicted probabilites."""
-        y_prob.fallback_mask = y_prob.max(axis=1) < self.threshold_
+        y_prob.fallback_mask = _is_top_low(y_prob, self.threshold_) | _are_top_2_close(
+            y_prob, self.ambiguity_threshold
+        )
 
 
 def _find_threshold(estimator, X_train, X_test, y_train, fallback_rate):

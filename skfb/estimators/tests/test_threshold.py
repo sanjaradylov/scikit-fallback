@@ -26,23 +26,25 @@ class TestFallbackEstimator:
 
 
 @pytest.mark.parametrize(
-    "y_score, y_true, threshold, ambiguity_threshold",
+    "y_score, y_true, fb_mask, threshold, ambiguity_threshold",
     [
         (
             np.array([[0.1, 0.2, 0.7], [0.33, 0.33, 0.34], [0.0, 1.0, 0.0]]),
             np.array([-1, -1, 1]),
+            np.array([True, True, False]),
             0.8,
             0.05,
         ),
         (
             np.array([[0.099, 0.4, 0.501], [0.495, 0.4, 0.105], [0.4, 0.5, 0.1]]),
             np.array([2, -1, -1]),
+            np.array([False, True, True]),
             0.2,
             0.1,
         ),
     ],
 )
-def test_predict_or_fallback(y_score, y_true, threshold, ambiguity_threshold):
+def test_predict_or_fallback(y_score, y_true, fb_mask, threshold, ambiguity_threshold):
     """Tests ``predict_or_fallback``."""
     rejector = TestFallbackEstimator()
     rejector.fit()
@@ -56,6 +58,16 @@ def test_predict_or_fallback(y_score, y_true, threshold, ambiguity_threshold):
         ambiguity_threshold=ambiguity_threshold,
     )
     np.testing.assert_array_equal(y_true, y_pred)
+
+    y_pred = predict_or_fallback(
+        rejector,
+        y_score,
+        classes,
+        threshold=threshold,
+        ambiguity_threshold=ambiguity_threshold,
+        fallback_mode="store",
+    )
+    np.testing.assert_array_equal(y_pred.get_dense_fallback_mask(), fb_mask)
 
 
 @pytest.mark.parametrize(
@@ -110,6 +122,12 @@ def test_threshold_fallback_classifier(y_true, y_comb, fallback_label):
     np.testing.assert_array_equal(
         rejector.set_params(fallback_mode="return").predict(X),
         y_comb,
+    )
+
+    rejector.set_params(fallback_mode="store", threshold=0.5, ambiguity_threshold=0.2)
+    np.testing.assert_array_equal(
+        rejector.predict_proba(X).get_dense_fallback_mask(),
+        np.array([False, False, False, False, True, True]),
     )
 
 
@@ -175,6 +193,13 @@ def test_threshold_fallback_classifier_cv(y_true, y_comb, fallback_label):
     np.testing.assert_array_equal(
         rejector.set_params(fallback_mode="return").predict(X),
         y_comb,
+    )
+
+    rejector.thresold_ = 0.5  # Of course, don't do this in prod...
+    rejector.set_params(fallback_mode="store", ambiguity_threshold=0.2)
+    np.testing.assert_array_equal(
+        rejector.predict_proba(X).get_dense_fallback_mask(),
+        np.array([False, False, False, False, True, True]),
     )
 
 
