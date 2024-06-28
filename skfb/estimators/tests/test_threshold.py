@@ -195,6 +195,13 @@ def test_threshold_fallback_classifier_cv(y_true, y_comb, fallback_label):
         y_comb,
     )
 
+    rejector.thresold_ = 0.5  # Of course, don't do this in prod...
+    rejector.set_params(fallback_mode="store", ambiguity_threshold=0.2)
+    np.testing.assert_array_equal(
+        rejector.predict_proba(X).get_dense_fallback_mask(),
+        np.array([False, False, False, False, True, True]),
+    )
+
 
 @pytest.mark.parametrize(
     "y_true, y_comb, fallback_label",
