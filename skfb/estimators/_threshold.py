@@ -8,7 +8,7 @@ import warnings
 # pyright: reportAttributeAccessIssue=false
 from sklearn.base import _fit_context, BaseEstimator, MetaEstimatorMixin
 from sklearn.base import clone
-from sklearn.metrics import accuracy_score, get_scorer
+from sklearn.metrics import accuracy_score, get_scorer, get_scorer_names
 from sklearn.model_selection import check_cv
 
 # pylint: disable=import-error,no-name-in-module
@@ -499,6 +499,9 @@ def _scoring_path(
     return scoring(y_test, y_pred)
 
 
+_N_THRESHOLDS = 10
+
+
 class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
     """A fallback classifier based on the best certainty threshold learnt via CV.
 
@@ -506,8 +509,11 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
     ----------
     estimator : object
         The base estimator making decisions.
-    thresholds : array-like of shape (n_thresholds,), default=(0.1, 0.5, 0.9)
+    thresholds : array-like of shape (n_thresholds,) or int, default=None
         Array of fallback thresholds to evaluate.
+        If None, defaults to 10 thresholds from p = 1 / len(classes),
+        which is about not falling back, to 0.95. Same with int except that the number
+        of threshold equals this value.
     ambiguity_threshold : float, default=0.0
         Predictions w/ the close top 2 scores are rejected.
     cv : int, cross-validation generator or an iterable, default=None
@@ -521,9 +527,10 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
 
         For integer/None inputs, if ``y`` is binary or multiclass,
         :class:`~sklearn.model_selection.StratifiedKFold` is used.
-    scoring : callable, default=None
+    scoring : callable or str, default=None
         A scorer callable object supporting a reject option, such as metrics from
         :mod:`~skfb.metrics`.
+        If not from scikit-learn, make sure to wrap it with ``make_scorer``.
     verbose : int, default=0
         Verbosity level .
     fallback_label : any, default=-1
@@ -570,9 +577,9 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
     _parameter_constraints.pop("threshold")
     _parameter_constraints.update(
         {
-            "thresholds": ["array-like", Interval(Real, 0.0, 1.0, closed="both")],
+            "thresholds": ["array-like", int, None],
             "cv": ["cv_object"],
-            "scoring": [callable, None],
+            "scoring": [callable, StrOptions(set(get_scorer_names())), None],
             "n_jobs": [Interval(Integral, -1, None, closed="left"), None],
         },
     )
@@ -581,7 +588,7 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
         self,
         estimator,
         *,
-        thresholds=(0.1, 0.5, 0.9),
+        thresholds=None,
         ambiguity_threshold=0.0,
         cv=None,
         scoring=None,
@@ -609,9 +616,23 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
         """Fits the base estimator and finds the best threshold."""
         set_attributes = set_attributes or {}
 
+        # region Maybe create thresholds.
+        if self.thresholds is None or isinstance(self.thresholds, int):
+            classes = set_attributes.get("classes_")
+            n_thresholds = self.thresholds or _N_THRESHOLDS
+            if classes is None:
+                thresholds_ = np.linspace(0.5, 0.95, n_thresholds)
+            else:
+                thresholds_ = np.linspace(1 / len(classes), 0.95, n_thresholds)
+        else:
+            thresholds_ = self.thresholds
+        # endregion
+
         # region Validate and/or create objects for cv.
         cv_ = check_cv(self.cv, y=y, classifier=True)
+        # endregion
 
+        # region Validate and/or create scoring.
         if self.scoring is None:
             if self.fallback_mode == "store":
                 scoring_ = predict_reject_accuracy_score
@@ -644,18 +665,19 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
                 ),
                 fallback_mode=self.fallback_mode,
             )
-            for threshold in self.thresholds
+            for threshold in thresholds_
             for train_idx, test_idx in cv_.split(X, y)
         )
-        cv_scores_ = np.array(scores).reshape(len(self.thresholds), cv_.n_splits)
+        cv_scores_ = np.array(scores).reshape(len(thresholds_), cv_.n_splits)
         # endregion
 
         # region Update fitted attributes
         mean_cv_scores = cv_scores_.mean(axis=1)
-        threshold_ = self.thresholds[np.argmax(mean_cv_scores)]
+        threshold_ = thresholds_[np.argmax(mean_cv_scores)]
         best_score_ = mean_cv_scores.max()
         set_attributes.update(
             {
+                "thresholds_": thresholds_,
                 "cv_": cv_,
                 "cv_scores_": cv_scores_,
                 "scoring_": scoring_,
