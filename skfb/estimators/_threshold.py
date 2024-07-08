@@ -1,13 +1,14 @@
 """Classification w/ fallback option based on decision threshold."""
 
 import abc
+import functools
 import warnings
 
 # pylint: disable=no-name-in-module
 # pyright: reportAttributeAccessIssue=false
 from sklearn.base import _fit_context, BaseEstimator, MetaEstimatorMixin
 from sklearn.base import clone
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, get_scorer
 from sklearn.model_selection import check_cv
 
 # pylint: disable=import-error,no-name-in-module
@@ -610,7 +611,21 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
 
         # region Validate and/or create objects for cv.
         cv_ = check_cv(self.cv, y=y, classifier=True)
-        scoring_ = self.scoring or predict_reject_accuracy_score
+
+        if self.scoring is None:
+            if self.fallback_mode == "store":
+                scoring_ = predict_reject_accuracy_score
+            else:
+                scoring_ = functools.partial(
+                    prediction_quality,
+                    score_func=accuracy_score,
+                    fallback_label=set_attributes.get(
+                        "fallback_label_",
+                        self.fallback_label,
+                    ),
+                )
+        elif isinstance(self.scoring, str):
+            scoring_ = get_scorer(self.scoring)
         # endregion
 
         # region Run maybe parallel scoring paths
