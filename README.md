@@ -8,28 +8,19 @@
 **scikit-fallback** is a scikit-learn-compatible Python package for machine learning
 with a reject option.
 
-
-### 🏗 Installation
-`scikit-fallback` requires:
-* Python (>=3.9,< 3.13)
-* scikit-learn (>=1.3)
-* matplotlib (>=3.0) (optional)
-
-```bash
-pip install -U scikit-fallback
-```
-
 ### 👩‍💻 Usage
 
-To allow your model to *fallback*—i.e., abstain from predictions—you can wrap your
-classification pipeline with a `scikit-fallback` *rejector* and then train the final
-pipeline and evaluate both the classifier's and the rejector's performance.
+To allow your probabilistic pipeline to *fallback*—i.e., abstain from predictions—you can
+wrap it with a `skfb` *rejector*. Training a rejector means both fitting your model and
+learning the best rules to accept or reject predictions. Evaluation of a rejector depends
+on *fallback mode* (inference with or without *fallback labels*) and measures the ability
+of the rejector to both accept correct predictions and reject ambiguous ones.
 
-For example, `RateFallbackClassifierCV` fits the base estimator and then finds the best
-confidence threshold s.t. the fallback rate on the held-out set is <= the provided value.
-If `fallback_mode == "store"`, then the rejector returns *FBNDArrays* of predictions
-and a sparse fallback-mask property, which lets us summarize the accuracy of both
-predictions and rejections.
+For example, `skfb.estimators.RateFallbackClassifierCV` fits the base estimator and then
+finds the best confidence threshold s.t. the fallback rate on the held-out set is <= the
+provided value. If `fallback_mode == "store"`, then the rejector returns
+`skfb.core.array.FBNDArray` of predictions and a sparse fallback-mask property, which lets
+us summarize the accuracy of both predictions and rejections.
 
 ```python
 from skfb.estimators import RateFallbackClassifierCV
@@ -42,11 +33,22 @@ rejector = RateFallbackClassifierCV(
     fallback_label=-1,
     fallback_mode="store",
 )
-rejector.fit(X_train, y_train)
-rejector.score(X_test, y_test)
+rejector.fit(X_train, y_train)  # Train base estimator and learn best threshold
+rejector.score(X_test, y_test)  # Compute acceptance-correctness accuracy score
 ```
 
 For more information, see the project's [Wiki](https://github.com/sanjaradylov/scikit-fallback/wiki).
+
+
+### 🏗 Installation
+`scikit-fallback` requires:
+* Python (>=3.9,< 3.13)
+* scikit-learn (>=1.3)
+* matplotlib (>=3.0) (optional)
+
+```bash
+pip install -U scikit-fallback
+```
 
 
 ### 📚 Examples
