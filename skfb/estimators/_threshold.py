@@ -24,7 +24,7 @@ from sklearn.utils._param_validation import (
 from sklearn.utils.metaestimators import available_if
 from sklearn.utils.multiclass import unique_labels
 from sklearn.utils.parallel import delayed, Parallel
-from sklearn.utils.validation import check_X_y, check_is_fitted
+from sklearn.utils.validation import check_X_y, check_is_fitted, NotFittedError
 
 import numpy as np
 
@@ -456,6 +456,20 @@ class ThresholdFallbackClassifier(BaseFallbackClassifier):
         )
         self.threshold = threshold
         self.ambiguity_threshold = ambiguity_threshold
+        # NOTE: I believe we are violating a scikit-learn proposal by assigning an
+        #       attribute right after the initialization instead of the fitting.
+        #       But this seems to be the best way to prevent refitting.
+        try:
+            check_is_fitted(self.estimator, "classes_")
+            fallback_label_ = self._validate_fallback_label(self.estimator.classes_)
+            fitted_params = {
+                "estimator_": self.estimator,
+                "classes_": self.estimator.classes_,
+                "fallback_label_": fallback_label_,
+            }
+            self._set_fitted_attributes(fitted_params)
+        except NotFittedError:
+            pass
 
     def _predict(self, X):
         """Predicts classes based on the fixed certainty threshold."""
