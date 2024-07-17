@@ -1,8 +1,11 @@
 """Classification w/ fallback option based on decision threshold."""
 
+import functools
+
 # pylint: disable=no-name-in-module
 # pyright: reportAttributeAccessIssue=false
 from sklearn.base import clone
+from sklearn.metrics import accuracy_score, get_scorer, get_scorer_names
 from sklearn.model_selection import check_cv
 
 # pylint: disable=import-error,no-name-in-module
@@ -16,12 +19,13 @@ from sklearn.utils._param_validation import (
     validate_params,
 )
 from sklearn.utils.parallel import delayed, Parallel
+from sklearn.utils.validation import check_is_fitted, NotFittedError
 
 import numpy as np
 
 from .base import BaseFallbackClassifier
 from ..core import array as ska
-from ..metrics import predict_reject_accuracy_score
+from ..metrics import predict_reject_accuracy_score, prediction_quality
 
 
 def _top_2(scores):
@@ -162,6 +166,20 @@ class ThresholdFallbackClassifier(BaseFallbackClassifier):
         )
         self.threshold = threshold
         self.ambiguity_threshold = ambiguity_threshold
+        # NOTE: I believe we are violating a scikit-learn proposal by assigning an
+        #       attribute right after the initialization instead of the fitting.
+        #       But this seems to be the best way to prevent refitting.
+        try:
+            check_is_fitted(self.estimator, "classes_")
+            fallback_label_ = self._validate_fallback_label(self.estimator.classes_)
+            fitted_params = {
+                "estimator_": self.estimator,
+                "classes_": self.estimator.classes_,
+                "fallback_label_": fallback_label_,
+            }
+            self._set_fitted_attributes(fitted_params)
+        except NotFittedError:
+            pass
 
     def _predict(self, X):
         """Predicts classes based on the fixed certainty threshold."""
@@ -177,7 +195,9 @@ class ThresholdFallbackClassifier(BaseFallbackClassifier):
 
     def _set_fallback_mask(self, y_prob):
         """Sets the fallback mask for predicted probabilites."""
-        y_prob.fallback_mask = y_prob.max(axis=1) < self.threshold
+        y_prob.fallback_mask = _is_top_low(y_prob, self.threshold) | _are_top_2_close(
+            y_prob, self.ambiguity_threshold
+        )
 
 
 def _scoring_path(
@@ -203,6 +223,9 @@ def _scoring_path(
     return scoring(y_test, y_pred)
 
 
+_N_THRESHOLDS = 10
+
+
 class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
     """A fallback classifier based on the best certainty threshold learnt via CV.
 
@@ -210,8 +233,11 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
     ----------
     estimator : object
         The base estimator making decisions.
-    thresholds : array-like of shape (n_thresholds,), default=(0.1, 0.5, 0.9)
+    thresholds : array-like of shape (n_thresholds,) or int, default=None
         Array of fallback thresholds to evaluate.
+        If None, defaults to 10 thresholds from p = 1 / len(classes),
+        which is about not falling back, to 0.95. Same with int except that the number
+        of threshold equals this value.
     ambiguity_threshold : float, default=0.0
         Predictions w/ the close top 2 scores are rejected.
     cv : int, cross-validation generator or an iterable, default=None
@@ -225,9 +251,10 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
 
         For integer/None inputs, if ``y`` is binary or multiclass,
         :class:`~sklearn.model_selection.StratifiedKFold` is used.
-    scoring : callable, default=None
+    scoring : callable or str, default=None
         A scorer callable object supporting a reject option, such as metrics from
         :mod:`~skfb.metrics`.
+        If not from scikit-learn, make sure to wrap it with ``make_scorer``.
     verbose : int, default=0
         Verbosity level .
     fallback_label : any, default=-1
@@ -274,9 +301,9 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
     _parameter_constraints.pop("threshold")
     _parameter_constraints.update(
         {
-            "thresholds": ["array-like", Interval(Real, 0.0, 1.0, closed="both")],
+            "thresholds": ["array-like", int, None],
             "cv": ["cv_object"],
-            "scoring": [callable, None],
+            "scoring": [callable, StrOptions(set(get_scorer_names())), None],
             "n_jobs": [Interval(Integral, -1, None, closed="left"), None],
         },
     )
@@ -285,7 +312,7 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
         self,
         estimator,
         *,
-        thresholds=(0.1, 0.5, 0.9),
+        thresholds=None,
         ambiguity_threshold=0.0,
         cv=None,
         scoring=None,
@@ -313,9 +340,37 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
         """Fits the base estimator and finds the best threshold."""
         set_attributes = set_attributes or {}
 
+        # region Maybe create thresholds.
+        if self.thresholds is None or isinstance(self.thresholds, int):
+            classes = set_attributes.get("classes_")
+            n_thresholds = self.thresholds or _N_THRESHOLDS
+            if classes is None:
+                thresholds_ = np.linspace(0.5, 0.95, n_thresholds)
+            else:
+                thresholds_ = np.linspace(1 / len(classes), 0.95, n_thresholds)
+        else:
+            thresholds_ = self.thresholds
+        # endregion
+
         # region Validate and/or create objects for cv.
         cv_ = check_cv(self.cv, y=y, classifier=True)
-        scoring_ = self.scoring or predict_reject_accuracy_score
+        # endregion
+
+        # region Validate and/or create scoring.
+        if self.scoring is None:
+            if self.fallback_mode == "store":
+                scoring_ = predict_reject_accuracy_score
+            else:
+                scoring_ = functools.partial(
+                    prediction_quality,
+                    score_func=accuracy_score,
+                    fallback_label=set_attributes.get(
+                        "fallback_label_",
+                        self.fallback_label,
+                    ),
+                )
+        elif isinstance(self.scoring, str):
+            scoring_ = get_scorer(self.scoring)
         # endregion
 
         # region Run maybe parallel scoring paths
@@ -334,18 +389,19 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
                 ),
                 fallback_mode=self.fallback_mode,
             )
-            for threshold in self.thresholds
+            for threshold in thresholds_
             for train_idx, test_idx in cv_.split(X, y)
         )
-        cv_scores_ = np.array(scores).reshape(len(self.thresholds), cv_.n_splits)
+        cv_scores_ = np.array(scores).reshape(len(thresholds_), cv_.n_splits)
         # endregion
 
         # region Update fitted attributes
         mean_cv_scores = cv_scores_.mean(axis=1)
-        threshold_ = self.thresholds[np.argmax(mean_cv_scores)]
+        threshold_ = thresholds_[np.argmax(mean_cv_scores)]
         best_score_ = mean_cv_scores.max()
         set_attributes.update(
             {
+                "thresholds_": thresholds_,
                 "cv_": cv_,
                 "cv_scores_": cv_scores_,
                 "scoring_": scoring_,
@@ -373,7 +429,9 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
 
     def _set_fallback_mask(self, y_prob):
         """Sets the fallback mask for predicted probabilites."""
-        y_prob.fallback_mask = y_prob.max(axis=1) < self.threshold_
+        y_prob.fallback_mask = _is_top_low(y_prob, self.threshold_) | _are_top_2_close(
+            y_prob, self.ambiguity_threshold
+        )
 
 
 def _find_threshold(estimator, X_train, X_test, y_train, fallback_rate):
