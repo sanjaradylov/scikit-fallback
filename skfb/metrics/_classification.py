@@ -7,7 +7,7 @@ __all__ = (
 
 import warnings
 
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, make_scorer, zero_one_loss
 
 # pylint: disable=import-error,no-name-in-module
 # pyright: reportMissingModuleSource=false
@@ -205,3 +205,82 @@ def predict_reject_accuracy_score(y_true, y_pred):
             category=RuntimeError,
         )
         return np.nan
+
+
+def error_rejection_loss(
+    y_true,
+    y_prob,
+    *,
+    thresholds,
+    y_pred=None,
+    score_func=None,
+    class_weight=None,
+):
+    """Computes weighted combination of rejection probabilities and prediction error.
+
+    First, for evey class from ``y_pred``, compute the fallback rate, then take weighted
+    average of fallback rates. Second, add prediction error to the obtained score.
+
+    Parameters
+    ----------
+    y_true : array-like of shape (n_samples,)
+        True labels.
+    y_prob : array-like of shape (n_samples, n_classes)
+        Predicted probabilities.
+        Defaults to zero-one loss.
+    thresholds : array-like of shape (n_classes,)
+        Local (class-wise) thresholds.
+    y_pred : array-like of shape (n_samples,), default=None
+        Predicted classes or rejections.
+        ``score_func`` can accept either ``y_prob`` or ``y_pred``.
+    score_func : callable, default=None
+        Prediction error scorer.
+        Defaults to ``sklearn.metrics.zero_one_loss``. If ``y_pred`` is also None,
+        calculates 0-1 loss between ``y_true`` and hard predictions w/o fallbacks.
+        Keep in mind that greater values mean higher overall loss.
+    class_weight : dict, default=None
+        Mapping from classes and fallback label to weights for weighted average of
+        losses. If None, defaults to classes from 0 to len(classes) mapped into
+        uniform proba.
+
+    Returns
+    -------
+    float : prediction-error--fallback-rate loss
+
+    Raises
+    ------
+    ValueError:
+        If all ``thresholds``, ``class_weight``, and ``classes`` are None.
+    """
+    # region Validate and set defaults to threshold, classes, and class weights
+    if class_weight is None:
+        n_classes = len(thresholds)
+        class_weight = np.array([1 / (n_classes + 1)] * (n_classes + 1))
+    # endregion
+
+    # region Validate scoring function
+    if score_func is None:
+        score_func = zero_one_loss
+        if y_pred is None:
+            y_pred = y_prob.argmax(axis=1)
+        elif isinstance(y_pred, ska.FBNDArray):
+            score_func = make_scorer(
+                predict_accept_confusion_matrix, greater_is_better=False
+            )
+    # endregion)
+
+    pred_class_mask = y_prob == y_prob.max(axis=1).reshape(-1, 1)
+    fallback_mask = np.less(y_prob, thresholds)
+    mask = pred_class_mask & fallback_mask
+
+    score = mask.sum(axis=0) / pred_class_mask.sum(axis=0)
+    score = sum(score * class_weight[:-1])
+
+    if y_pred is None:
+        error = score_func(y_true, y_prob)
+    else:
+        error = score_func(y_true, y_pred)
+
+    score += error * class_weight[-1]
+
+    return score
