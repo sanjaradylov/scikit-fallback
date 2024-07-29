@@ -7,7 +7,17 @@ __all__ = (
 
 import numpy as np
 
-from sklearn.preprocessing import LabelEncoder
+from sklearn.utils.validation import check_is_fitted, NotFittedError
+
+# pylint: disable=import-error,no-name-in-module
+# pyright: reportMissingModuleSource=false
+from sklearn.utils._param_validation import (
+    HasMethods,
+    Interval,
+    Real,
+    StrOptions,
+    validate_params,
+)
 
 from .base import BaseFallbackClassifier
 from ..core import array as ska
@@ -15,11 +25,6 @@ from ..core import array as ska
 
 def _is_top_low(y_score, thresholds):
     """Whether the top confidence score is lower than the threshold."""
-    label_encoder = LabelEncoder()
-    thresholds = dict(
-        zip(label_encoder.fit_transform(list(thresholds.keys())), thresholds.values())
-    )
-
     hard_preds = y_score.argmax(axis=1).reshape(-1, 1)
     soft_preds = np.take_along_axis(y_score, hard_preds, 1).ravel()
     pick_thresholds = [thresholds[p[0]] for p in hard_preds]
@@ -40,14 +45,27 @@ def _are_top_2_close(y_score, ambiguity_threshold):
     return y_diff[:, 0] < ambiguity_threshold
 
 
+@validate_params(
+    {
+        "estimator": [HasMethods(["fit", "predict_proba"])],
+        "X": ["array-like", "sparse matrix"],
+        "thresholds": ["array-like"],
+        "classes": [None, np.ndarray],
+        "ambiguity_threshold": [Interval(Real, left=0.0, right=1.0, closed="both")],
+        "fallback_mode": [StrOptions({"return", "store"})],
+        "return_probas": [bool],
+    },
+    prefer_skip_nested_validation=True,
+)
 def multi_threshold_predict_or_fallback(
     estimator,
     X,
+    thresholds,
     classes=None,
-    thresholds=None,
     ambiguity_threshold=0.0,
     fallback_label=-1,
     fallback_mode="return",
+    return_probas=False,
 ):
     """For every sample, either predicts a class or rejects a prediction.
 
@@ -57,10 +75,10 @@ def multi_threshold_predict_or_fallback(
         Fitted base estimator supporting probabilistic predictions.
     X : {array-like, sparse matrix}, shape (n_samples, n_features)
         Input samples.
-    classes : ndarray, shape = (n_classes,)
-        NDArray of class labels.
-    thresholds : float, default=0.5
-        Predictions w/ the lower thresholds are rejected.
+    thresholds : array-like, shape (n_classes,)
+        Certainty thresholds for each class.
+    classes : ndarray, shape = (n_classes,), default=None
+        NDArray of class labels. Defaults to ``estimator`` classes.
     ambiguity_threshold : float, default=0.0
         Predictions w/ the close top 2 scores are rejected.
     fallback_label : any, default=-1
@@ -95,7 +113,8 @@ def multi_threshold_predict_or_fallback(
     array(['a', 'a', 'a', 'b', 'b', 'b', 'd', 'd', 'c', 'c', 'c', 'd', 'd'],
           dtype='<U1')
     """
-    thresholds = thresholds or dict.fromkeys(classes, 1 / len(classes))
+    if classes is None:
+        classes = estimator.classes_
 
     y_prob = estimator.predict_proba(X)
     fallback_mask = _is_top_low(y_prob, thresholds)
@@ -107,11 +126,11 @@ def multi_threshold_predict_or_fallback(
         y_comb = np.empty(len(fallback_mask), dtype=classes.dtype)
         y_comb[acceptance_mask] = classes.take(y_prob[acceptance_mask].argmax(axis=1))
         y_comb[fallback_mask] = fallback_label
-        return y_comb
+        return y_comb if not return_probas else (y_comb, y_prob)
     else:
         y_pred = classes.take(y_prob.argmax(axis=1))
         y_pred = ska.fbarray(y_pred, fallback_mask)
-        return y_pred
+        return y_pred if not return_probas else (y_pred, y_prob)
 
 
 class MultiThresholdFallbackClassifier(BaseFallbackClassifier):
@@ -145,12 +164,20 @@ class MultiThresholdFallbackClassifier(BaseFallbackClassifier):
     ...     ])
     >>> y = np.array(["a"] * 3 + ["b"] * 5 + ["c"] * 5)
     >>> estimator = LogisticRegression(C=10_000, random_state=0).fit(X, y)
-    >>> thresholds = {"a": 0.99, "b": 0.8, "c": 0.75}
+    >>> thresholds = [0.99, 0.8, 0.75]
     >>> r = MultiThresholdFallbackClassifier(estimator, thresholds=thresholds)
     >>> r.set_params(fallback_label="d", fallback_mode="return").fit(X, y).predict(X)
     array(['a', 'a', 'a', 'b', 'b', 'b', 'd', 'd', 'c', 'c', 'c', 'd', 'd'],
           dtype='<U1')
     """
+
+    _parameter_constraints = {**BaseFallbackClassifier._parameter_constraints}
+    _parameter_constraints.update(
+        {
+            "thresholds": ["array-like"],
+            "ambiguity_threshold": [Interval(Real, 0.0, 1.0, closed="both")],
+        },
+    )
 
     def __init__(
         self,
@@ -168,14 +195,28 @@ class MultiThresholdFallbackClassifier(BaseFallbackClassifier):
         )
         self.thresholds = thresholds
         self.ambiguity_threshold = ambiguity_threshold
+        # NOTE: I believe we are violating a scikit-learn proposal by assigning an
+        #       attribute right after the initialization instead of the fitting.
+        #       But this seems to be the best way to prevent refitting.
+        try:
+            check_is_fitted(self.estimator, "classes_")
+            fallback_label_ = self._validate_fallback_label(self.estimator.classes_)
+            fitted_params = {
+                "estimator_": self.estimator,
+                "classes_": self.estimator.classes_,
+                "fallback_label_": fallback_label_,
+            }
+            self._set_fitted_attributes(fitted_params)
+        except NotFittedError:
+            pass
 
     def _predict(self, X):
         """Predicts classes based on the fixed class-wise certainty thresholds."""
         return multi_threshold_predict_or_fallback(
             self.estimator_,
             X,
-            self.classes_,
-            thresholds=self.thresholds,
+            self.thresholds,
+            classes=self.classes_,
             ambiguity_threshold=self.ambiguity_threshold,
             fallback_label=self.fallback_label_,
             fallback_mode=self.fallback_mode,

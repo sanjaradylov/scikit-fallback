@@ -87,7 +87,7 @@ def test_multi_threshold_fallback_classifier():
     y_comb = np.array(["a"] * 3 + ["b"] * 3 + ["d"] * 2 + ["c"] * 3 + ["d"] * 2)
 
     estimator = LogisticRegression(C=10_000, random_state=0)
-    thresholds = {"a": 0.99, "b": 0.8, "c": 0.75}
+    thresholds = [0.99, 0.8, 0.75]
     rejector = MultiThresholdFallbackClassifier(
         estimator,
         thresholds=thresholds,
