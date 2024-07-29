@@ -7,12 +7,19 @@ __all__ = (
 
 import numpy as np
 
+from scipy.stats import uniform
+
+from sklearn.base import clone
+from sklearn.metrics import get_scorer_names
+from sklearn.model_selection import check_cv, ParameterSampler
+from sklearn.utils.parallel import delayed, Parallel
 from sklearn.utils.validation import check_is_fitted, NotFittedError
 
 # pylint: disable=import-error,no-name-in-module
 # pyright: reportMissingModuleSource=false
 from sklearn.utils._param_validation import (
     HasMethods,
+    Integral,
     Interval,
     Real,
     StrOptions,
@@ -21,6 +28,7 @@ from sklearn.utils._param_validation import (
 
 from .base import BaseFallbackClassifier
 from ..core import array as ska
+from ..metrics._classification import get_scoring
 
 
 def _is_top_low(y_score, thresholds):
@@ -225,5 +233,267 @@ class MultiThresholdFallbackClassifier(BaseFallbackClassifier):
     def _set_fallback_mask(self, y_prob):
         """Sets the fallback mask for predicted probabilities."""
         y_prob.fallback_mask = _is_top_low(y_prob, self.thresholds) | _are_top_2_close(
+            y_prob, self.ambiguity_threshold
+        )
+
+
+MAX_THRESHOLD = 1.0
+
+
+def yield_thresholds(classes, n_iter=10, random_state=None):
+    """Generates local thresholds either exhaustively or randomly."""
+    min_threshold = 1 / len(classes)
+    max_threshold = MAX_THRESHOLD
+
+    distributions = {
+        c: uniform(loc=min_threshold, scale=max_threshold - min_threshold)
+        for c in classes
+    }
+    sampler = ParameterSampler(distributions, n_iter=n_iter, random_state=random_state)
+
+    return (tuple(s.values()) for s in sampler)
+
+
+def _generate_scoring_path(
+    threshold_grid,
+    cv,
+    base_estimator,
+    X,
+    y,
+    scoring,
+    fallback_label,
+    fallback_mode,
+):
+    """Fits estimator every cv iteration, yields thresholds, and runs threshold eval."""
+    for train_idx, test_idx in cv.split(X, y):
+        estimator = clone(base_estimator).fit(X[train_idx], y[train_idx])
+        for thresholds in threshold_grid:
+            yield delayed(_scoring_path)(
+                estimator,
+                thresholds,
+                X[train_idx],
+                X[test_idx],
+                y[train_idx],
+                y[test_idx],
+                scoring,
+                fallback_label,
+                fallback_mode,
+            )
+
+
+def _scoring_path(
+    base_estimator,
+    thresholds,
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    scoring,
+    fallback_label=-1,
+    fallback_mode="store",
+):
+    """Trains and scores an estimator w/ a reject option."""
+    estimator = MultiThresholdFallbackClassifier(
+        base_estimator,
+        thresholds=thresholds,
+        ambiguity_threshold=0.0,
+        fallback_label=fallback_label,
+        fallback_mode=fallback_mode,
+    )
+    y_pred = estimator.fit(X_train, y_train).predict(X_test)
+    return scoring(y_test, y_pred)
+
+
+class MultiThresholdFallbackClassifierCV(MultiThresholdFallbackClassifier):
+    """A fallback classifier based on local thresholds tuned with cross-validation.
+
+    Uniformly samples local thresholds ranging from the maximum threshold s.t. no
+    samples are rejected and 1.0. After sampling, evaluates performance w/ cv and
+    chooses the best thresholds w.r.t scoring.
+
+    Parameters
+    ----------
+    estimator : object
+        Fitted base estimator supporting probabilistic predictions.
+    ambiguity_threshold : float, default=0.0
+        Predictions w/ the close top 2 scores are rejected
+    n_iter : int, default=10
+        Number of thresholds to generate.
+    random_state : int or numpy.random.RandomState, default=None
+        Random state.
+    cv : int, cross-validation generator or an iterable, default=None
+        Determines the cross-validation splitting strategy.
+        Possible inputs for cv are:
+
+        - None, to use the efficient Leave-One-Out cross-validation
+        - integer, to specify the number of folds.
+        - :term:`CV splitter`,
+        - An iterable yielding (train, test) splits as arrays of indices.
+
+        For integer/None inputs, if ``y`` is binary or multiclass,
+        :class:`~sklearn.model_selection.StratifiedKFold` is used.
+    scoring : callable or str, default=None
+        A scorer callable object supporting a reject option, such as metrics from
+        :mod:`~skfb.metrics`.
+        If not from scikit-learn, make sure to wrap it with ``make_scorer``.
+        Defaults to either ``skfb.metrics.prediction_quality(accuracy_score)``
+        for ``fallback_mode="return"`` or ``skfb.metrics.predict_reject_accuracy_score``
+        for ``fallback_mode="store``.
+    n_jobs : int, default=None
+        Number of CPU cores used during the cross-validation loop.
+    verbose : int, default=0
+        Verbosity level.
+    fallback_label : any, default=-1
+        The label of a rejected example.
+        Should be compatible w/ the class labels from training data.
+    fallback_mode : {"return", "store"}, default="store"
+        While predicting, whether to return a numpy ndarray of both predictions and
+        fallbacks, or an fbndarray of predictions storing also fallback mask.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from sklearn.linear_model import LogisticRegression
+    >>> from skfb.estimators import MultiThresholdFallbackClassifierCV
+    >>> X = np.array(
+    ...     [
+    ...         [-3, -3], [-3, -2], [-2, -3],
+    ...         [2, 3], [2, 4], [3, 4], [3.1, 3], [3, 2.9],
+    ...         [4, 3], [3, 2], [4, 2], [2.9, 3], [3, 3.1],
+    ...     ])
+    >>> y = np.array(["a"] * 3 + ["b"] * 5 + ["c"] * 5)
+    >>> estimator = LogisticRegression(C=10_000, random_state=0)
+    >>> rejector = MultiThresholdFallbackClassifierCV(
+    ...     estimator=estimator, cv=2, n_iter=10, random_state=0).fit(X, y)
+
+    Notes
+    -----
+    Supports also binary classifiers.
+    """
+
+    _parameter_constraints = {**MultiThresholdFallbackClassifier._parameter_constraints}
+    _parameter_constraints.pop("thresholds")
+    _parameter_constraints.update(
+        {
+            "n_iter": [Interval(Integral, 1, None, closed="left"), None],
+            "cv": ["cv_object"],
+            "scoring": [callable, StrOptions(set(get_scorer_names())), None],
+            "n_jobs": [Interval(Integral, -1, None, closed="left"), None],
+            "verbose": [bool, int],
+        },
+    )
+
+    def __init__(
+        self,
+        estimator,
+        *,
+        ambiguity_threshold=0.0,
+        n_iter=10,
+        cv=None,
+        scoring=None,
+        random_state=None,
+        n_jobs=None,
+        verbose=0,
+        fallback_label=-1,
+        fallback_mode="store",
+    ):
+        super().__init__(
+            estimator=estimator,
+            thresholds={},
+            ambiguity_threshold=ambiguity_threshold,
+            fallback_label=fallback_label,
+            fallback_mode=fallback_mode,
+        )
+
+        del self.thresholds
+
+        self.n_iter = n_iter
+        self.random_state = random_state
+        self.cv = cv
+        self.scoring = scoring
+        self.n_jobs = n_jobs
+        self.verbose = verbose
+
+    def _fit(self, X, y, set_attributes=None, **fit_params):
+        """Fits the base estimator and finds the best threshold."""
+        set_attributes = set_attributes or {}
+
+        # region Create threshold grid
+        classes_ = set_attributes.get("classes_")
+        threshold_grid = list(
+            yield_thresholds(
+                classes_,
+                n_iter=self.n_iter,
+                random_state=self.random_state,
+            )
+        )
+        # endregion
+
+        # region Validate and/or create objects for cv.
+        cv_ = check_cv(self.cv, y=y, classifier=True)
+        # endregion
+
+        # region Validate and/or create scoring.
+        scoring_ = get_scoring(
+            scoring=self.scoring,
+            fallback_label=set_attributes.get(
+                "fallback_label_",
+                self.fallback_label,
+            ),
+            fallback_mode=self.fallback_mode,
+        )
+        # endregion
+
+        # region Run maybe parallel scoring paths
+        scores = Parallel(n_jobs=self.n_jobs, verbose=self.verbose, prefer="processes")(
+            _generate_scoring_path(
+                threshold_grid,
+                cv_,
+                self.estimator,
+                X,
+                y,
+                scoring_,
+                set_attributes.get("fallback_label_", self.fallback_label),
+                self.fallback_mode,
+            )
+        )
+        cv_scores_ = np.array(scores).reshape(cv_.n_splits, -1)
+        # endregion
+
+        # region Update fitted attributes
+        mean_cv_scores = cv_scores_.mean(axis=1)
+        thresholds_ = threshold_grid[np.argmax(mean_cv_scores)]
+        best_score_ = mean_cv_scores.max()
+        set_attributes.update(
+            {
+                "scoring_": scoring_,
+                "thresholds_": thresholds_,
+                "cv_": cv_,
+                "cv_scores_": cv_scores_,
+                "best_score_": best_score_,
+            },
+        )
+        set_attributes.update(
+            super()._fit(X, y, set_attributes=set_attributes, **fit_params)
+        )
+        # endregion
+
+        return set_attributes
+
+    def _predict(self, X):
+        """Predicts classes based on the learned local thresholds."""
+        return multi_threshold_predict_or_fallback(
+            self.estimator_,
+            X,
+            classes=self.classes_,
+            thresholds=self.thresholds_,
+            ambiguity_threshold=self.ambiguity_threshold,
+            fallback_label=self.fallback_label_,
+            fallback_mode=self.fallback_mode,
+        )
+
+    def _set_fallback_mask(self, y_prob):
+        """Sets the fallback mask for predicted probabilities."""
+        y_prob.fallback_mask = _is_top_low(y_prob, self.thresholds_) | _are_top_2_close(
             y_prob, self.ambiguity_threshold
         )

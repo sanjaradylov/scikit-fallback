@@ -5,9 +5,17 @@ __all__ = (
     "predict_reject_accuracy_score",
 )
 
+import functools
 import warnings
 
-from sklearn.metrics import confusion_matrix, make_scorer, zero_one_loss
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    get_scorer,
+    get_scorer_names,
+    make_scorer,
+    zero_one_loss,
+)
 
 # pylint: disable=import-error,no-name-in-module
 # pyright: reportMissingModuleSource=false
@@ -18,6 +26,7 @@ from sklearn.utils.multiclass import type_of_target
 import numpy as np
 
 from ..core import array as ska
+from ._common import prediction_quality
 
 
 @validate_params(
@@ -267,7 +276,7 @@ def error_rejection_loss(
             score_func = make_scorer(
                 predict_accept_confusion_matrix, greater_is_better=False
             )
-    # endregion)
+    # endregion
 
     pred_class_mask = y_prob == y_prob.max(axis=1).reshape(-1, 1)
     fallback_mask = np.less(y_prob, thresholds)
@@ -284,3 +293,26 @@ def error_rejection_loss(
     score += error * class_weight[-1]
 
     return score
+
+
+@validate_params(
+    {
+        "scoring": [callable, StrOptions(set(get_scorer_names())), None],
+        "fallback_mode": [StrOptions({"store", "return"})],
+    },
+    prefer_skip_nested_validation=True,
+)
+def get_scoring(scoring=None, fallback_label=-1, fallback_mode="store"):
+    """Returns the default scorer if it's None; otherwise, ``scoring`` itself."""
+    if scoring is None:
+        if fallback_mode == "store":
+            scoring = predict_reject_accuracy_score
+        else:
+            scoring = functools.partial(
+                prediction_quality,
+                score_func=accuracy_score,
+                fallback_label=fallback_label,
+            )
+    elif isinstance(scoring, str):
+        scoring = get_scorer(scoring)
+    return scoring
