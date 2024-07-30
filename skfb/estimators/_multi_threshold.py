@@ -23,12 +23,12 @@ from sklearn.utils._param_validation import (
     Interval,
     Real,
     StrOptions,
-    validate_params,
 )
 
 from .base import BaseFallbackClassifier
 from ..core import array as ska
 from ..metrics._classification import get_scoring
+from ..utils._legacy import validate_params
 
 
 def _is_top_low(y_score, thresholds):

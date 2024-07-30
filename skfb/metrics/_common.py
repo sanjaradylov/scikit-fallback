@@ -2,13 +2,10 @@
 
 import warnings
 
-# pylint: disable=import-error,no-name-in-module
-# pyright: reportMissingModuleSource=false
-from sklearn.utils._param_validation import validate_params
-
 import numpy as np
 
 from ..core import array as ska
+from ..utils._legacy import validate_params
 
 
 @validate_params(

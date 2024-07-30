@@ -9,9 +9,7 @@ import numpy as np
 
 from scipy.sparse import coo_array
 
-# pylint: disable=import-error,no-name-in-module
-# pyright: reportMissingModuleSource=false
-from sklearn.utils._param_validation import validate_params
+from ..utils._legacy import validate_params
 
 
 class FBNDArray(np.ndarray):

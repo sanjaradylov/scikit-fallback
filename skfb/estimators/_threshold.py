@@ -12,7 +12,6 @@ from sklearn.utils._param_validation import (
     Interval,
     Real,
     StrOptions,
-    validate_params,
 )
 from sklearn.utils.parallel import delayed, Parallel
 from sklearn.utils.validation import check_is_fitted, NotFittedError
@@ -22,6 +21,7 @@ import numpy as np
 from .base import BaseFallbackClassifier
 from ..core import array as ska
 from ..metrics._classification import get_scoring
+from ..utils._legacy import validate_params
 
 
 def _top_2(scores):
