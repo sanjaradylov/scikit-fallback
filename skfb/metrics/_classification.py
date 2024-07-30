@@ -19,13 +19,14 @@ from sklearn.metrics import (
 
 # pylint: disable=import-error,no-name-in-module
 # pyright: reportMissingModuleSource=false
-from sklearn.utils._param_validation import StrOptions, validate_params
+from sklearn.utils._param_validation import StrOptions
 from sklearn.utils import check_consistent_length, column_or_1d
 from sklearn.utils.multiclass import type_of_target
 
 import numpy as np
 
 from ..core import array as ska
+from ..utils._legacy import validate_params
 from ._common import prediction_quality
 
 

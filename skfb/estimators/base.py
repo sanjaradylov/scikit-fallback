@@ -9,15 +9,13 @@ __all__ = (
 import abc
 import warnings
 
-# pylint: disable=no-name-in-module
-# pyright: reportAttributeAccessIssue=false
-from sklearn.base import _fit_context, BaseEstimator, MetaEstimatorMixin
+from sklearn.base import BaseEstimator, MetaEstimatorMixin
 from sklearn.base import clone
 from sklearn.metrics import accuracy_score
 
 # pylint: disable=import-error,no-name-in-module
 # pyright: reportMissingModuleSource=false
-from sklearn.utils._param_validation import HasMethods, validate_params
+from sklearn.utils._param_validation import HasMethods
 from sklearn.utils.metaestimators import available_if
 from sklearn.utils.multiclass import unique_labels
 from sklearn.utils.validation import check_X_y, check_is_fitted
@@ -25,6 +23,7 @@ from sklearn.utils.validation import check_X_y, check_is_fitted
 import numpy as np
 
 from ..core import array as ska
+from ..utils._legacy import _fit_context, validate_params
 
 
 class RejectorMixin:
