@@ -3,6 +3,7 @@
 __all__ = (
     "predict_accept_confusion_matrix",
     "predict_reject_accuracy_score",
+    "predict_reject_recall_score",
 )
 
 import functools
@@ -19,7 +20,7 @@ from sklearn.metrics import (
 
 # pylint: disable=import-error,no-name-in-module
 # pyright: reportMissingModuleSource=false
-from sklearn.utils._param_validation import StrOptions
+from sklearn.utils._param_validation import Interval, Real, StrOptions
 from sklearn.utils import check_consistent_length, column_or_1d
 from sklearn.utils.multiclass import type_of_target
 
@@ -190,7 +191,19 @@ def predict_reject_accuracy_score(y_true, y_pred):
 
     Returns
     -------
-    score : (TA + TR) / (TA + TR + FA + FR)
+    score : float
+        (TA + TR) / (TA + TR + FA + FR)
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from skfb.core import array as ska
+    >>> from skfb.metrics import predict_reject_accuracy_score
+    >>> y_true =    np.array([0, 1, 0, 0, 1, 1, 0, 1, 0, 1])
+    >>> y_pred = ska.fbarray([0, 1, 0, 1, 0, 1, 1, 1, 0, 1],
+    ...                      [1, 1, 1, 1, 0, 0, 0, 0, 0, 0])
+    >>> predict_reject_accuracy_score(y_true, y_pred)
+    np.float64(0.5)
     """
     y_type, y_true, y_pred = _check_targets(y_true, y_pred)
 
@@ -215,6 +228,52 @@ def predict_reject_accuracy_score(y_true, y_pred):
             category=RuntimeError,
         )
         return np.nan
+
+
+@validate_params(
+    {
+        "y_true": ["array-like"],
+        "y_pred": [ska.FBNDArray],
+        "beta": [Interval(Real, left=0.0, right=1.0, closed="both")],
+    },
+    prefer_skip_nested_validation=True,
+)
+def predict_reject_recall_score(y_true, y_pred, beta=0.5):
+    """Calculates weighted average of prediction and rejection recalls.
+
+    Parameters
+    ----------
+    y_true : array-like
+        True labels.
+    y_pred : FBNDarray
+        Base estimator predictions w/ fallback mask.
+    beta : float, default=0.5
+        The weight of prediction recall.
+
+    Returns
+    -------
+    score : float
+        TA / (TA + FR) * beta + TR / (TR + FA) * (1 - beta)
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from skfb.core import array as ska
+    >>> from skfb.metrics import predict_reject_recall_score
+    >>> y_true =    np.array([0, 1, 0, 0, 1, 1, 0, 1, 0, 1])
+    >>> y_pred = ska.fbarray([0, 1, 0, 1, 0, 1, 1, 1, 0, 1],
+    ...                      [1, 1, 1, 1, 0, 0, 0, 0, 0, 0])
+    >>> # TR = 1, FA = 2, TA = 4, FR = 3
+    >>> predict_reject_recall_score(y_true, y_pred, beta=0.75)
+    0.5119...
+    """
+    y_type, y_true, y_pred = _check_targets(y_true, y_pred)
+    if y_type.startswith("multilabel"):
+        raise ValueError("Multilabel outputs are not supported.")
+
+    cm = predict_accept_confusion_matrix(y_true, y_pred)
+    ta, tr, fa, fr = cm[1, 1], cm[0, 0], cm[0, 1], cm[1, 0]
+    return ta / (ta + fr) * beta + tr / (tr + fa) * (1 - beta)
 
 
 def error_rejection_loss(

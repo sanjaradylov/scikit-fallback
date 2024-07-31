@@ -13,6 +13,7 @@ from skfb.metrics import (
     error_rejection_loss,
     predict_accept_confusion_matrix,
     predict_reject_accuracy_score,
+    predict_reject_recall_score,
 )
 
 
@@ -120,6 +121,33 @@ def test_failed_predict_accept_confusion_matrix(y_true, y_pred):
 )
 def test_predict_reject_accuracy_score(y_true, y_pred, result):
     assert predict_reject_accuracy_score(y_true, y_pred) == result
+
+
+@pytest.mark.parametrize(
+    "y_true, y_pred, beta, result",
+    [
+        (
+            np.array([0, 1, 0, 0, 1, 1, 0, 1, 0, 1]),
+            ska.fbarray([0, 1, 0, 1, 0, 1, 1, 1, 0, 1], [1, 1, 1, 1, 0, 0, 0, 0, 0, 0]),
+            0.4,
+            4 / (4 + 3) * 0.4 + 1 / (1 + 2) * 0.6,
+        ),
+        (
+            np.array([0, 1, 0, 0, 1, 1, 0, 1, 0, 1]),
+            ska.fbarray([0, 1, 0, 1, 0, 1, 1, 1, 0, 1], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+            0.1,
+            7 / (7 + 0) * 0.1,
+        ),
+        (
+            np.array([0, 1, 0, 0, 1, 1, 0, 1, 0, 1]),
+            ska.fbarray([0, 1, 0, 1, 0, 1, 1, 1, 0, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]),
+            0.1,
+            3 / (3 + 0) * (1 - 0.1),
+        ),
+    ],
+)
+def test_predict_reject_recall_score(y_true, y_pred, beta, result):
+    assert predict_reject_recall_score(y_true, y_pred, beta=beta) == result
 
 
 @pytest.mark.parametrize(
