@@ -1,5 +1,7 @@
 """Classification w/ fallback option based on decision threshold."""
 
+import warnings
+
 from sklearn.base import clone
 from sklearn.metrics import get_scorer_names
 from sklearn.model_selection import check_cv
@@ -441,8 +443,8 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
     ----------
     estimator : object
         The base estimator supporting probabilistic predictions.
-    fallback_rates : array-like of float, default=(0.1,)
-        The rate of rejected test samples.
+    fallback_rates : array-like of shape (n_fallback_rates,) or float, default=0.05
+        The rate(s) of rejected test samples.
     cv : int, cross-validation generator or an iterable, default=None
         Determines the cross-validation splitting strategy.
         Possible inputs for cv are:
@@ -475,7 +477,7 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
     >>> y = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1])
     >>> rejector = RateFallbackClassifierCV(
     ...     estimator,
-    ...     fallback_rates=(0.2,),
+    ...     fallback_rate=0.2,
     ...     cv=2,
     ...     fallback_label=-1,
     ...     fallback_mode="return")
@@ -488,7 +490,7 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
     _parameter_constraints = {**BaseFallbackClassifier._parameter_constraints}
     _parameter_constraints.update(
         {
-            "fallback_rates": ["array-like", Interval(Real, 0.0, 1.0, closed="both")],
+            "fallback_rate": [Interval(Real, 0.0, 1.0, closed="both")],
             "cv": ["cv_object"],
             "scoring": [callable, None],
             "n_jobs": [Interval(Integral, -1, None, closed="left"), None],
@@ -499,7 +501,8 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
         self,
         estimator,
         *,
-        fallback_rates=(0.1,),
+        fallback_rate=0.1,
+        fallback_rates=None,
         cv=None,
         n_jobs=None,
         verbose=0,
@@ -512,6 +515,14 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
             fallback_mode=fallback_mode,
         )
 
+        if fallback_rates is not None:
+            warnings.warn(
+                "`fallback_rates` is deprecated, use `fallback_rate` instead; "
+                "see https://github.com/sanjaradylov/scikit-fallback/issues/11",
+                category=DeprecationWarning,
+            )
+
+        self.fallback_rate = fallback_rate
         self.fallback_rates = fallback_rates
         self.cv = cv
         self.n_jobs = n_jobs
@@ -522,7 +533,6 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
         set_attributes = set_attributes or {}
 
         cv_ = check_cv(self.cv, y=y, classifier=True)
-        set_attributes.update({"cv_": cv_})
 
         estimator = clone(self.estimator)
 
@@ -534,18 +544,18 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
                 X[train_idx],
                 X[test_idx],
                 y[train_idx],
-                fallback_rate,
+                self.fallback_rate,
             )
-            for fallback_rate in self.fallback_rates
             for train_idx, test_idx in cv_.split(X, y)
         )
+
         set_attributes.update(
             {
+                "cv_": cv_,
                 "thresholds_": np.array(thresholds_),
                 "threshold_": np.mean(thresholds_),
             },
         )
-
         set_attributes.update(super()._fit(X, y, set_attributes, **fit_params))
 
         return set_attributes
