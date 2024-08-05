@@ -445,6 +445,12 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
         The base estimator supporting probabilistic predictions.
     fallback_rates : array-like of shape (n_fallback_rates,) or float, default=0.05
         The rate(s) of rejected test samples.
+
+        .. deprecated:: 0.1
+            ``fallback_rates`` was deprecated in 0.1 and will be removed in 0.2.
+            Use ``fallback_rate`` instead.
+    fallback_rate : float, default=0.1
+        The rate of rejected test samples.
     cv : int, cross-validation generator or an iterable, default=None
         Determines the cross-validation splitting strategy.
         Possible inputs for cv are:
@@ -517,9 +523,10 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
 
         if fallback_rates is not None:
             warnings.warn(
-                "`fallback_rates` is deprecated, use `fallback_rate` instead; "
-                "see https://github.com/sanjaradylov/scikit-fallback/issues/11",
-                category=DeprecationWarning,
+                "`fallback_rates` was deprecated in version 0.1 and will be removed "
+                "in 0.2. Use `fallback_rate` instead (see "
+                "https://github.com/sanjaradylov/scikit-fallback/issues/11)",
+                category=FutureWarning,
             )
 
         self.fallback_rate = fallback_rate

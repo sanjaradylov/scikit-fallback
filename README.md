@@ -17,7 +17,7 @@ on *fallback mode* (inference with or without *fallback labels*) and measures th
 of the rejector to both accept correct predictions and reject ambiguous ones.
 
 For example, `skfb.estimators.RateFallbackClassifierCV` fits the base estimator and then
-finds the best confidence threshold s.t. the fallback rate on the held-out set is <= the
+finds the confidence threshold s.t. the fallback rate on the held-out set is <= the
 provided value. If `fallback_mode == "store"`, then the rejector returns
 `skfb.core.array.FBNDArray` of predictions and a sparse fallback-mask property, which lets
 us summarize the accuracy of both predictions and rejections.
@@ -28,7 +28,7 @@ from sklearn.linear_model import LogisticRegressionCV
 
 rejector = RateFallbackClassifierCV(
     LogisticRegressionCV(cv=4, random_state=0),
-    fallback_rates=(0.05, 0.06, 0.07),
+    fallback_rate=0.05,
     cv=5,
     fallback_label=-1,
     fallback_mode="store",
