@@ -220,10 +220,10 @@ def test_rate_fallback_classifier(y_true, y_comb, fallback_label):
     X = np.array(X_accept + X_ambiguous)
 
     estimator = LogisticRegression(random_state=0)
-    fallback_rates = [0.2]
+    fallback_rate = 0.2
     cv = 2
 
-    rejector = RateFallbackClassifierCV(estimator, fallback_rates=fallback_rates, cv=cv)
+    rejector = RateFallbackClassifierCV(estimator, fallback_rate=fallback_rate, cv=cv)
     rejector.set_params(fallback_label=fallback_label).fit(X, y_true)
 
     for key in ["cv_", "estimator_", "threshold_", "thresholds_"]:
