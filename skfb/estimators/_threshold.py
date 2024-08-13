@@ -191,7 +191,7 @@ class ThresholdFallbackClassifier(BaseFallbackClassifier):
             fallback_mode=self.fallback_mode,
         )
 
-    def _set_fallback_mask(self, y_prob):
+    def _set_fallback_mask(self, y_prob, X=None):
         """Sets the fallback mask for predicted probabilites."""
         y_prob.fallback_mask = _is_top_low(y_prob, self.threshold) | _are_top_2_close(
             y_prob, self.ambiguity_threshold
@@ -419,7 +419,7 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
             fallback_mode=self.fallback_mode,
         )
 
-    def _set_fallback_mask(self, y_prob):
+    def _set_fallback_mask(self, y_prob, X=None):
         """Sets the fallback mask for predicted probabilites."""
         y_prob.fallback_mask = _is_top_low(y_prob, self.threshold_) | _are_top_2_close(
             y_prob, self.ambiguity_threshold
@@ -578,6 +578,6 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
             fallback_mode=self.fallback_mode,
         )
 
-    def _set_fallback_mask(self, y_prob):
+    def _set_fallback_mask(self, y_prob, X=None):
         """Sets the fallback mask for predicted probabilites."""
         y_prob.fallback_mask = y_prob.max(axis=1) < self.threshold_
