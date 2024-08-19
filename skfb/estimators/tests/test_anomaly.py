@@ -37,6 +37,7 @@ def test_anomaly_fallback_classifier():
 
     true_fallback_mask = np.array([False] * 8 + [True] * 2)
 
+    # region ``AnomalyFallbackClassifier.predict``
     np.testing.assert_array_equal(
         true_fallback_mask,
         rejector.predict(X).get_dense_fallback_mask(),
@@ -46,8 +47,11 @@ def test_anomaly_fallback_classifier():
         np.array([0, 1, 0, 1, 0, 1, 0, 1, -1, -1]),
         rejector.set_params(fallback_mode="return").predict(X),
     )
+    # endregion
 
-    y_prob = rejector.predict_proba(X)
+    assert rejector.score(X, y) == 1.0
+
+    y_prob = rejector.set_params(fallback_mode="store").predict_proba(X)
     assert y_prob.shape == (len(X), 2)
     np.testing.assert_array_equal(
         true_fallback_mask,

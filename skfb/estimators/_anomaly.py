@@ -18,6 +18,21 @@ from .base import BaseFallbackClassifier, _estimator_has
 class AnomalyFallbackClassifier(BaseFallbackClassifier):
     """A fallback classifier based on provided anomaly detector.
 
+    Parameters
+    ----------
+    estimator : object
+        The base estimator making decisions w/o fallbacks.
+    outlier_detector : object
+        The outlier detector returning 1 for inliers and -1 for outliers.
+    remove_outliers : bool, default=False
+        Whether to remove outliers from training data before fitting.
+    fallback_label : any, default=-1
+        The label of a rejected example.
+        Should be compatible w/ the class labels from training data.
+    fallback_mode : {"return", "store"}, default="store"
+        While predicting, whether to return a numpy ndarray of both predictions and
+        fallbacks, or an fbndarray of predictions storing also fallback mask.
+
     Examples
     --------
     >>> import numpy as np
@@ -46,6 +61,7 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
     _parameter_constraints.update(
         {
             "outlier_detector": [HasMethods(["fit_predict"])],
+            "remove_outliers": ["boolean"],
         },
     )
 
@@ -53,6 +69,7 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
         self,
         estimator,
         outlier_detector,
+        remove_outliers=False,
         fallback_label=-1,
         fallback_mode="store",
     ):
@@ -63,6 +80,7 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
         )
 
         self.outlier_detector = outlier_detector
+        self.remove_outliers = remove_outliers
 
     def fit(self, X, y, **fit_params):
         """Trains base estimator and outlier detector then sets fit attributes.
@@ -80,8 +98,20 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
             Returns self.
         """
         self.outlier_detector.fit(X, y, **fit_params)
-        self._set_fitted_attributes({"outlier_detector_": self.outlier_detector})
-        return super().fit(X, y, **fit_params)
+        self._set_fitted_attributes(
+            {
+                "outlier_detector_": self.outlier_detector,
+                "is_fitted_": False,  # Not yet; after super().fit(X, y, **fp)
+            },
+        )
+
+        if self.remove_outliers:
+            acceptance_mask = self.outlier_detector_.predict(X) == 1
+            X_in = X[acceptance_mask]
+            y_in = y[acceptance_mask]
+            return super().fit(X_in, y_in, **fit_params)
+        else:
+            return super().fit(X, y, **fit_params)
 
     def _predict(self, X):
         """Runs outlier detection and classification.
@@ -133,6 +163,39 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
             attribute :term:`classes_`.
         """
         check_is_fitted(self, attributes="is_fitted_")
-        y_prob = ska.fbarray(self.estimator_.decision_function(X))
-        self._set_fallback_mask(y_prob, X=X)
+        y_prob = self.estimator_.decision_function(X)
+        if self.fallback_mode == "store":
+            y_prob = ska.fbarray(y_prob)
+            self._set_fallback_mask(y_prob, X=X)
+        return y_prob
+
+    @available_if(_estimator_has("predict_proba"))
+    @validate_params(
+        {
+            "X": ["array-like", "sparse matrix"],
+        },
+        prefer_skip_nested_validation=True,
+    )
+    def predict_proba(self, X):
+        """Calls ``predict_proba`` on the estimator.
+
+        Parameters
+        ----------
+        X : indexable, length n_samples
+            Input samples to classify.
+            Must fulfill the input assumptions of the
+            underlying estimator.
+
+        Returns
+        -------
+        y_pred : FBNDArray of shape (n_samples,) or (n_samples, n_classes)
+            Predicted class probabilities for `X` based on the estimator.
+            The order of the classes corresponds to that in the fitted
+            attribute :term:`classes_`.
+        """
+        check_is_fitted(self, attributes="is_fitted_")
+        y_prob = self.estimator_.predict_proba(X)
+        if self.fallback_mode == "store":
+            y_prob = ska.fbarray(y_prob)
+            self._set_fallback_mask(y_prob, X=X)
         return y_prob
