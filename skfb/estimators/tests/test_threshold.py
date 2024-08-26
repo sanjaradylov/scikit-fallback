@@ -105,13 +105,19 @@ def test_threshold_fallback_classifier(y_true, y_comb, fallback_label):
         rejector.fallback_label_.dtype,
         rejector.classes_.dtype,
     )
+
+    y_store = rejector.predict(X)
     np.testing.assert_array_equal(
-        rejector.predict(X).get_dense_fallback_mask(),
+        y_store.get_dense_fallback_mask(),
         np.array([False, False, False, False, True, True]),
     )
     np.testing.assert_array_equal(
         rejector.set_params(fallback_mode="return").predict(X),
         y_comb,
+    )
+    np.testing.assert_array_equal(
+        y_store,
+        rejector.set_params(fallback_mode="ignore").predict(X),
     )
 
     rejector.set_params(fallback_mode="store", threshold=0.5, ambiguity_threshold=0.2)
@@ -176,13 +182,19 @@ def test_threshold_fallback_classifier_cv(y_true, y_comb, fallback_label):
         rejector.fallback_label_.dtype,
         rejector.classes_.dtype,
     )
+
+    y_store = rejector.predict(X)
     np.testing.assert_array_equal(
-        rejector.predict(X).get_dense_fallback_mask(),
+        y_store.get_dense_fallback_mask(),
         np.array([False, False, False, False, True, False]),
     )
     np.testing.assert_array_equal(
         rejector.set_params(fallback_mode="return").predict(X),
         y_comb,
+    )
+    np.testing.assert_array_equal(
+        y_store,
+        rejector.set_params(fallback_mode="ignore").predict(X),
     )
 
     rejector.threshold_ = 0.5  # Of course, don't do this in prod...
