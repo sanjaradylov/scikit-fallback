@@ -263,6 +263,9 @@ class PAConfusionMatrixDisplay(ConfusionMatrixDisplay):
         if rejector_.fallback_mode == "return":
             y_pred = rejector_.set_params(fallback_mode="store").predict(X)
             rejector_.set_params(fallback_mode="return")
+        elif rejector_.fallback_mode == "ignore":
+            y_pred = rejector_.set_params(fallback_mode="store").predict(X)
+            rejector_.set_params(fallback_mode="ignore")
         else:
             y_pred = rejector.predict(X)
 
