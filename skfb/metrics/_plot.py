@@ -257,6 +257,8 @@ class PAConfusionMatrixDisplay(ConfusionMatrixDisplay):
 
         if isinstance(rejector, Pipeline):
             rejector_ = rejector[-1]
+        else:
+            rejector_ = rejector
 
         if rejector_.fallback_mode == "return":
             y_pred = rejector_.set_params(fallback_mode="store").predict(X)
