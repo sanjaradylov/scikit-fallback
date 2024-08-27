@@ -102,11 +102,17 @@ def test_multi_threshold_fallback_classifier():
         rejector.fallback_label_.dtype,
         rejector.classes_.dtype,
     )
+
+    y_store = rejector.predict(X)
     np.testing.assert_array_equal(
-        rejector.predict(X).get_dense_fallback_mask(),
+        y_store.get_dense_fallback_mask(),
         np.array([False] * 3 + [False] * 3 + [True] * 2 + [False] * 3 + [True] * 2),
     )
     np.testing.assert_array_equal(
         rejector.set_params(fallback_mode="return").predict(X),
         y_comb,
+    )
+    np.testing.assert_array_equal(
+        y_store,
+        rejector.set_params(fallback_mode="ignore").predict(X),
     )

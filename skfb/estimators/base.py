@@ -15,7 +15,7 @@ from sklearn.metrics import accuracy_score
 
 # pylint: disable=import-error,no-name-in-module
 # pyright: reportMissingModuleSource=false
-from sklearn.utils._param_validation import HasMethods
+from sklearn.utils._param_validation import HasMethods, StrOptions
 from sklearn.utils.metaestimators import available_if
 from sklearn.utils.multiclass import unique_labels
 from sklearn.utils.validation import check_X_y, check_is_fitted
@@ -66,13 +66,16 @@ class BaseFallbackClassifier(
     fallback_label : any, default=-1
         The label of a rejected example.
         Should be compatible w/ the class labels from training data.
-    fallback_mode : {"return", "store"}, default="store"
-        While predicting, whether to return a numpy ndarray of both predictions and
-        fallbacks, or an fbndarray of predictions storing also fallback mask.
+    fallback_mode : {"return", "store", "ignore"}, default="store"
+        While predicting, whether to return:
+        * ("return") a numpy ndarray of both predictions and fallbacks;
+        * ("store")  an fbndarray of predictions storing also fallback mask;
+        * ("ignore") a numpy ndarray of only estimator's predictions.
     """
 
     _parameter_constraints = {
         "estimator": [HasMethods(["fit", "predict_proba"])],
+        "fallback_mode": [StrOptions({"return", "store", "ignore"})],
     }
 
     _estimator_type = "rejector"
@@ -201,7 +204,11 @@ class BaseFallbackClassifier(
         base-estimator predictions w/ fallback mask.
         """
         check_is_fitted(self, attributes="is_fitted_")
-        return self._predict(X)
+
+        if self.fallback_mode == "ignore":
+            return self.estimator_.predict(X)
+        else:
+            return self._predict(X)
 
     @available_if(_estimator_has("predict_proba"))
     @validate_params(
@@ -213,6 +220,8 @@ class BaseFallbackClassifier(
     def predict_proba(self, X):
         """Calls ``predict_proba`` on the estimator.
 
+        If fallback_mode != "ignore", returns fbndarray w/ fallback mask.
+
         Parameters
         ----------
         X : indexable, length n_samples
@@ -222,14 +231,19 @@ class BaseFallbackClassifier(
 
         Returns
         -------
-        y_pred : FBNDArray of shape (n_samples,) or (n_samples, n_classes)
+        y_pred : FBNDArray or ndarray of shape (n_samples, n_classes)
             Predicted class probabilities for `X` based on the estimator.
             The order of the classes corresponds to that in the fitted
             attribute :term:`classes_`.
         """
         check_is_fitted(self, attributes="is_fitted_")
-        y_prob = ska.fbarray(self.estimator_.predict_proba(X))
-        self._set_fallback_mask(y_prob)
+
+        if self.fallback_mode == "ignore":
+            y_prob = self.estimator_.predict_proba(X)
+        else:
+            y_prob = ska.fbarray(self.estimator_.predict_proba(X))
+            self._set_fallback_mask(y_prob)
+
         return y_prob
 
     @available_if(_estimator_has("decision_function"))
@@ -268,6 +282,8 @@ class BaseFallbackClassifier(
     def predict_log_proba(self, X):
         """Returns log of ``predict_proba`` on the estimator.
 
+        If fallback_mode != "ignore", returns fbndarray w/ fallback mask.
+
         Parameters
         ----------
         X : indexable, length n_samples
@@ -277,7 +293,7 @@ class BaseFallbackClassifier(
 
         Returns
         -------
-        y_pred : FBNDArray of shape (n_samples,) or (n_samples, n_classes)
+        y_pred : FBNDArray or ndarray of shape (n_samples, n_classes)
             Predicted class log-probabilities for `X` based on the estimator.
             The order of the classes corresponds to that in the fitted
             attribute :term:`classes_`.
@@ -321,9 +337,13 @@ class BaseFallbackClassifier(
         from ..metrics._common import prediction_quality
 
         y_pred = self.predict(X)
+
         if self.fallback_mode == "store":
             return predict_reject_accuracy_score(y, y_pred)
-        return prediction_quality(y, y_pred, accuracy_score, self.fallback_label_)
+        elif self.fallback_mode == "return":
+            return prediction_quality(y, y_pred, accuracy_score, self.fallback_label_)
+        else:
+            return accuracy_score(y, y_pred)
 
 
 def is_rejector(estimator):
