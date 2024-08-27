@@ -64,20 +64,22 @@ estimator = MLPClassifier(
     verbose=10,
 )
 pipe = make_pipeline(StandardScaler(), estimator)
-rejector = ThresholdFallbackClassifier(pipe, threshold=0.8, fallback_mode="return")
+rejector = ThresholdFallbackClassifier(pipe, threshold=0.8)
 rejector.fit(X_train, y_train)
 # endregion
 
 # region Evaluate
+rejector.set_params(fallback_mode="ignore")
 print("MLPClassifier without fallbacks:")
-print(f"Test accuracy: {rejector.estimator_.score(X_train, y_train) * 100.0:.2f}%")
-print(f"Test accuracy: {rejector.estimator_.score(X_test, y_test) * 100.0:.2f}%")
+print(f"Train accuracy: {rejector.score(X_train, y_train) * 100.0:.2f}%")
+print(f"Test  accuracy: {rejector.score(X_test, y_test) * 100.0:.2f}%")
 
 print("\nMLPClassifier with fallbacks:")
-print(f"Test accuracy: {rejector.score(X_train, y_train) * 100.0:.2f}%")
-print(f"Test accuracy: {rejector.score(X_test, y_test) * 100.0:.2f}%")
+rejector.set_params(fallback_mode="return")
+print(f"Train accuracy: {rejector.score(X_train, y_train) * 100.0:.2f}%")
+print(f"Test  accuracy: {rejector.score(X_test, y_test) * 100.0:.2f}%")
 
-PAConfusionMatrixDisplay.from_estimator(rejector, X_test, y_test).plot()
+PAConfusionMatrixDisplay.from_estimator(rejector, X_test, y_test)
 # endregion
 
 # region Generate random images and plot rejections
