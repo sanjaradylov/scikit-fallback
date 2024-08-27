@@ -8,7 +8,7 @@ import numpy as np
 # pyright: reportMissingModuleSource=false
 from sklearn.utils._param_validation import HasMethods
 from sklearn.utils.metaestimators import available_if
-from sklearn.utils.validation import check_is_fitted
+from sklearn.utils.validation import check_is_fitted, NotFittedError
 
 from ..core import array as ska
 from ..utils._legacy import validate_params
@@ -83,6 +83,24 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
 
         self.outlier_detector = outlier_detector
         self.remove_outliers = remove_outliers
+
+        # NOTE: I believe we are violating a scikit-learn proposal by assigning an
+        #       attribute right after the initialization instead of the fitting.
+        #       But this seems to be the best way to prevent refitting.
+        try:
+            check_is_fitted(self.estimator, "classes_")
+            check_is_fitted(self.outlier_detector)
+
+            fallback_label_ = self._validate_fallback_label(self.estimator.classes_)
+            fitted_params = {
+                "estimator_": self.estimator,
+                "outlier_detector_": self.outlier_detector,
+                "classes_": self.estimator.classes_,
+                "fallback_label_": fallback_label_,
+            }
+            self._set_fitted_attributes(fitted_params)
+        except NotFittedError:
+            pass
 
     def fit(self, X, y, **fit_params):
         """Trains base estimator and outlier detector then sets fit attributes.
