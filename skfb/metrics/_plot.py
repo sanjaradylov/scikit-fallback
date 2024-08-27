@@ -1,6 +1,7 @@
 """Fallback-based visualizations"""
 
 from sklearn.metrics import accuracy_score, auc, ConfusionMatrixDisplay
+from sklearn.pipeline import Pipeline
 from sklearn.utils import check_consistent_length
 from sklearn.utils.validation import check_is_fitted
 
@@ -254,9 +255,12 @@ class PAConfusionMatrixDisplay(ConfusionMatrixDisplay):
         if not is_rejector(rejector):
             raise ValueError(f"{method_name} only supports rejectors")
 
-        if rejector.fallback_mode == "return":
-            y_pred = rejector.set_params(fallback_mode="store").predict(X)
-            rejector.set_params(fallback_mode="return")
+        if isinstance(rejector, Pipeline):
+            rejector_ = rejector[-1]
+
+        if rejector_.fallback_mode == "return":
+            y_pred = rejector_.set_params(fallback_mode="store").predict(X)
+            rejector_.set_params(fallback_mode="return")
         else:
             y_pred = rejector.predict(X)
 
