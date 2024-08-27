@@ -115,9 +115,11 @@ class ThresholdFallbackClassifier(BaseFallbackClassifier):
     fallback_label : any, default=-1
         The label of a rejected example.
         Should be compatible w/ the class labels from training data.
-    fallback_mode : {"return", "store"}, default="store"
-        While predicting, whether to return a numpy ndarray of both predictions and
-        fallbacks, or an fbndarray of predictions storing also fallback mask.
+    fallback_mode : {"return", "store", "ignore"}, default="store"
+        While predicting, whether to return:
+        * ("return") a numpy ndarray of both predictions and fallbacks;
+        * ("store")  an fbndarray of predictions storing also fallback mask;
+        * ("ignore") a numpy ndarray of only estimator's predictions.
 
     Examples
     --------
@@ -258,9 +260,11 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
     fallback_label : any, default=-1
         The label of a rejected example.
         Should be compatible w/ the class labels from training data.
-    fallback_mode : {"return", "store"}, default="store"
-        While predicting, whether to return a numpy ndarray of both predictions and
-        fallbacks, or an fbndarray of predictions storing also fallback mask.
+    fallback_mode : {"return", "store", "ignore"}, default="store"
+        While predicting, whether to return:
+        * ("return") a numpy ndarray of both predictions and fallbacks;
+        * ("store")  an fbndarray of predictions storing also fallback mask;
+        * ("ignore") a numpy ndarray of only estimator's predictions.
 
     Examples
     --------
