@@ -178,7 +178,7 @@ class BaseFallbackClassifier(
         """An abstract method to make predictions w/ or w/o fallbacks."""
 
     @abc.abstractmethod
-    def _set_fallback_mask(self, y_prob):
+    def _set_fallback_mask(self, y_prob, X=None):
         """Sets the fallback mask for predicted probabilites."""
 
     @available_if(_estimator_has("predict"))
@@ -242,7 +242,7 @@ class BaseFallbackClassifier(
             y_prob = self.estimator_.predict_proba(X)
         else:
             y_prob = ska.fbarray(self.estimator_.predict_proba(X))
-            self._set_fallback_mask(y_prob)
+            self._set_fallback_mask(y_prob, X=X)
 
         return y_prob
 
