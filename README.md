@@ -12,21 +12,20 @@ with a reject option.
 
 To allow your probabilistic pipeline to *fallback*—i.e., abstain from predictions—you can
 wrap it with a `skfb` *rejector*. Training a rejector means both fitting your model and
-learning the best rules to accept or reject predictions. Evaluation of a rejector depends
+learning to accept or reject predictions. Evaluation of a rejector depends
 on *fallback mode* (inference with or without *fallback labels*) and measures the ability
 of the rejector to both accept correct predictions and reject ambiguous ones.
 
-For example, `skfb.estimators.RateFallbackClassifierCV` fits the base estimator and then
-finds the confidence threshold s.t. the fallback rate on the held-out set is <= the
-provided value. If `fallback_mode == "store"`, then the rejector returns
-`skfb.core.array.FBNDArray` of predictions and a sparse fallback-mask property, which lets
-us summarize the accuracy of both predictions and rejections.
+For example, `skfb.estimators.ThresholdFallbackClassifierCV` fits the base estimator and then
+finds the best confidence threshold via cross-validation. If `fallback_mode == "store"`, then the
+rejector returns `skfb.core.array.FBNDArray` of predictions and a sparse fallback-mask property,
+which lets us summarize the accuracy of both predictions and rejections.
 
 ```python
-from skfb.estimators import RateFallbackClassifierCV
+from skfb.estimators import ThresholdFallbackClassifierCV
 from sklearn.linear_model import LogisticRegressionCV
 
-rejector = RateFallbackClassifierCV(
+rejector = ThresholdFallbackClassifierCV(
     LogisticRegressionCV(cv=4, random_state=0),
     fallback_rate=0.05,
     cv=5,
@@ -47,7 +46,7 @@ For more information, see the project's [Wiki](https://github.com/sanjaradylov/s
 * matplotlib (>=3.0) (optional)
 
 If you already have `scikit-learn` installed and it's `scikit-learn<=1.2`, make sure that `numpy<2.0`
-to prevent incompatibility.
+to prevent incompatibility issues.
 
 ```bash
 pip install -U scikit-fallback
