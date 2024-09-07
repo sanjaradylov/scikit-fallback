@@ -41,7 +41,7 @@ For more information, see the project's [Wiki](https://github.com/sanjaradylov/s
 
 ### 🏗 Installation
 `scikit-fallback` requires:
-* Python (>=3.9,< 3.13)
+* Python (>=3.8,<3.13)
 * scikit-learn (>=1.0)
 * matplotlib (>=3.0) (optional)
 
