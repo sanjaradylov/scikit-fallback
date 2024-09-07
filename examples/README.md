@@ -5,6 +5,9 @@ This is the gallery of examples that showcase how `scikit-fallback` can be combi
 `scikit-learn` and other packages to build and analyze machine-learning classifiers with
 a reject option.
 
+* [notebooks/osvm-mnist.ipynb](./notebooks/osvm-mnist.ipynb): combine scikit-learn's `OneClassSVM`
+  and `MLPClassifier` with scikit-fallback's `AnomalyFallbackClassifier` to predict or reject
+  noisy MNIST data.
 * [plot_confusion_matrix.py](./plot_confusion_matrix.py): learn to reject low-confidence
   MNIST images and plot predict-accept confusion matrix.
 * [plot_decision_boundary.py](./plot_decision_boundary.py): plot the regions where

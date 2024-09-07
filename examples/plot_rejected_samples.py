@@ -34,9 +34,7 @@ X_train, X_test, y_train, y_test, in_mask_train, in_mask_test = train_test_split
 
 # region Train a rejector
 estimator = LogisticRegression(C=10_000, random_state=0)
-rejector = RateFallbackClassifierCV(
-    estimator, fallback_rates=(1 / 4, 1 / 3, 1 / 2), cv=3
-)
+rejector = RateFallbackClassifierCV(estimator, fallback_rate=1 / 3, cv=3)
 rejector.fit(X_train, y_train)
 # endregion
 
