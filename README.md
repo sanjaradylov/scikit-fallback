@@ -27,7 +27,8 @@ from sklearn.linear_model import LogisticRegressionCV
 
 rejector = ThresholdFallbackClassifierCV(
     LogisticRegressionCV(cv=4, random_state=0),
-    fallback_rate=0.05,
+    thresholds=10,
+    ambiguity_threshold=0.05,
     cv=5,
     fallback_label=-1,
     fallback_mode="store",
