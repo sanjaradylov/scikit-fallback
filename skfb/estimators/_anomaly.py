@@ -178,9 +178,8 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
         Returns
         -------
         y_pred : FBNDArray of shape (n_samples,) or (n_samples, n_classes)
-            Predicted class probabilities for `X` based on the estimator.
-            The order of the classes corresponds to that in the fitted
-            attribute :term:`classes_`.
+            Predicted class scores for `X` based on the estimator.
+            If ``self.fallback_mode == "store"``, scores store fallback mask.
         """
         check_is_fitted(self, attributes="is_fitted_")
         y_prob = self.estimator_.decision_function(X)
@@ -212,6 +211,7 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
             Predicted class probabilities for `X` based on the estimator.
             The order of the classes corresponds to that in the fitted
             attribute :term:`classes_`.
+            If ``self.fallback_mode == "store"``, probabilities store fallback mask.
         """
         check_is_fitted(self, attributes="is_fitted_")
         y_prob = self.estimator_.predict_proba(X)

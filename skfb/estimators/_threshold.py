@@ -49,7 +49,7 @@ def _is_top_low(y_score, threshold):
         "X": ["array-like", "sparse matrix"],
         "classes": [np.ndarray],
         "threshold": [Interval(Real, 0.0, 1.0, closed="both")],
-        "fallback_mode": [StrOptions({"return", "store"})],
+        "fallback_mode": [StrOptions({"return", "store", "ignore"})],
     },
     prefer_skip_nested_validation=True,
 )
@@ -78,11 +78,17 @@ def predict_or_fallback(
         Predictions w/ the close top 2 scores are rejected.
     fallback_label : any, default=-1
         Rejected samples are labeled w/ this label.
-    fallback_mode : {"store", "return"}, default="return"
-        If "store", returns an FBNDArray of shape (n_samples,) w/ estimator predictions
-        and fallback mask attribute.
-        If "return", returns an NDArray of shape (n_samples,) w/ estimator predictions
-        and rejections.
+    fallback_mode : {"store", "return", "ignore"}, default="return"
+        While predicting, whether to return:
+        * ("return") a numpy ndarray of both predictions and fallbacks;
+        * ("store")  an fbndarray of predictions storing also fallback mask;
+        * ("ignore") a numpy ndarray of only estimator's predictions.
+
+    Returns
+    -------
+    FBNDArray or ndarray, shape (n_samples,)
+        Predictions w/o fallbacks, combined predictions, or predictions w/
+        fallback mask; depends on ``fallback_mode``.
     """
     y_prob = estimator.predict_proba(X)
     fallback_mask = _is_top_low(y_prob, threshold)
@@ -95,6 +101,8 @@ def predict_or_fallback(
         y_comb[acceptance_mask] = classes.take(y_prob[acceptance_mask].argmax(axis=1))
         y_comb[fallback_mask] = fallback_label
         return y_comb
+    elif fallback_mode == "ignore":
+        return y_prob.argmax(axis=1)
     else:
         y_pred = classes.take(y_prob.argmax(axis=1))
         y_pred = ska.fbarray(y_pred, fallback_mask)
@@ -472,8 +480,10 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
         The label of a rejected example.
         Should be compatible w/ the class labels from training data.
     fallback_mode : {"return", "store"}, default="store"
-        While predicting, whether to return a numpy ndarray of both predictions and
-        fallbacks, or an fbndarray of predictions storing also fallback mask.
+        While predicting, whether to return:
+        * ("return") a numpy ndarray of both predictions and fallbacks;
+        * ("store")  an fbndarray of predictions storing also fallback mask;
+        * ("ignore") a numpy ndarray of only estimator's predictions.
 
     Examples
     --------
