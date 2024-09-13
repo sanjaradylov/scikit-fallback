@@ -55,6 +55,16 @@ def test_predict_or_fallback(y_score, y_true, fb_mask, threshold, ambiguity_thre
         classes,
         threshold=threshold,
         ambiguity_threshold=ambiguity_threshold,
+        fallback_mode="ignore",
+    )
+    assert -1 not in y_pred
+
+    y_pred = predict_or_fallback(
+        rejector,
+        y_score,
+        classes,
+        threshold=threshold,
+        ambiguity_threshold=ambiguity_threshold,
         fallback_mode="store",
     )
     np.testing.assert_array_equal(y_pred.get_dense_fallback_mask(), fb_mask)

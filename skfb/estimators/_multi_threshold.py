@@ -60,7 +60,7 @@ def _are_top_2_close(y_score, ambiguity_threshold):
         "thresholds": ["array-like"],
         "classes": [None, np.ndarray],
         "ambiguity_threshold": [Interval(Real, left=0.0, right=1.0, closed="both")],
-        "fallback_mode": [StrOptions({"return", "store"})],
+        "fallback_mode": [StrOptions({"return", "store", "ignore"})],
         "return_probas": [bool],
     },
     prefer_skip_nested_validation=True,
@@ -91,16 +91,20 @@ def multi_threshold_predict_or_fallback(
         Predictions w/ the close top 2 scores are rejected.
     fallback_label : any, default=-1
         Rejected samples are labeled w/ this label.
-    fallback_mode : {"store", "return"}, default="return"
-        If "store", returns an FBNDArray of shape (n_samples,) w/ estimator predictions
-        and fallback mask attribute.
-        If "return", returns an NDArray of shape (n_samples,) w/ estimator predictions
-        and rejections.
+    fallback_mode : {"store", "return", "ignore"}, default="return"
+        Whether to have:
+        * ("return") a numpy ndarray of both predictions and fallbacks;
+        * ("store")  an fbndarray of predictions storing also fallback mask;
+        * ("ignore") a numpy ndarray of only estimator's predictions.
+    return_probas : bool, default=False
+        Whether to return also probabilities.
 
     Returns
     -------
-    FBNDArray or ndarray, shape = n_samples
-        Either combined predictions or predictions w/ fallback mask.
+    FBNDArray or ndarray, or tuple of FBNDArray of shape = n_samples \
+            and ndarray of shape (n_samples, n_classes)
+        Predictions w/o fallbacks, combined predictions, or predictions w/
+        fallback mask; depends on ``fallback_mode`` and ``return_probas``.
 
     Examples
     --------
@@ -135,6 +139,8 @@ def multi_threshold_predict_or_fallback(
         y_comb[acceptance_mask] = classes.take(y_prob[acceptance_mask].argmax(axis=1))
         y_comb[fallback_mask] = fallback_label
         return y_comb if not return_probas else (y_comb, y_prob)
+    elif fallback_mode == "ignore":
+        return classes.take(y_prob.argmax(axis=1))
     else:
         y_pred = classes.take(y_prob.argmax(axis=1))
         y_pred = ska.fbarray(y_pred, fallback_mask)

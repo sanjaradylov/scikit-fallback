@@ -63,6 +63,16 @@ def test_predict_or_fallback(y_score, y_true, thresholds, ambiguity_threshold):
     )
     np.testing.assert_array_equal(y_true, y_pred)
 
+    y_pred = multi_threshold_predict_or_fallback(
+        rejector,
+        y_score,
+        classes=classes,
+        thresholds=thresholds,
+        ambiguity_threshold=ambiguity_threshold,
+        fallback_mode="ignore",
+    )
+    assert -1 not in y_pred
+
 
 def test_multi_threshold_fallback_classifier():
     """Tests fit, predict, and attrs of ``MultiThresholdFallbackClassifier``."""

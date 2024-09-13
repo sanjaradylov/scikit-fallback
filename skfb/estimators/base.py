@@ -200,8 +200,10 @@ class BaseFallbackClassifier(
 
         Returns
         -------
-        Either an ndarray of predictions w/ optional fallback labels, or an FBNDarray of
-        base-estimator predictions w/ fallback mask.
+        Depending on ``self.fallback_mask``:
+        * ("return") a numpy ndarray of both predictions and fallbacks, or;
+        * ("store")  an fbndarray of predictions storing also fallback mask, or;
+        * ("ignore") a numpy ndarray of only estimator's predictions.
         """
         check_is_fitted(self, attributes="is_fitted_")
 
@@ -235,6 +237,7 @@ class BaseFallbackClassifier(
             Predicted class probabilities for `X` based on the estimator.
             The order of the classes corresponds to that in the fitted
             attribute :term:`classes_`.
+            If ``self.fallback_mask == "ignore"``, returns an ndarray.
         """
         check_is_fitted(self, attributes="is_fitted_")
 
@@ -297,6 +300,7 @@ class BaseFallbackClassifier(
             Predicted class log-probabilities for `X` based on the estimator.
             The order of the classes corresponds to that in the fitted
             attribute :term:`classes_`.
+            If ``self.fallback_mask == "ignore"``, returns an ndarray.
         """
         y_prob = self.predict_proba(X)
         return np.log(y_prob)
@@ -310,7 +314,7 @@ class BaseFallbackClassifier(
         prefer_skip_nested_validation=True,
     )
     def score(self, X, y):
-        """Returns the prediction-rejection accuracy score of the estimator.
+        """Evaluates an accuracy score.
 
         Parameters
         ----------
@@ -325,7 +329,10 @@ class BaseFallbackClassifier(
         Returns
         -------
         score : float
-            Prediction-fallback accuracy.
+            Depending on ``self.fallback_mode``:
+            * ("return") prediction quality (accuracy on accepted examples), or;
+            * ("store")  prediction-rejection accuracy, or;
+            * ("ignore") accuracy w/o fallbacks.
 
         See also
         --------
