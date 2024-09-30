@@ -136,8 +136,8 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
     def _predict(self, X):
         """Runs outlier detection and classification.
 
-        Returns both fallbacks and classes if ``self.fallback_mask == 'return'``,
-        or classes w/ fallback mask if ``self.fallback_mask == 'store'``.
+        Returns both fallbacks and classes if ``self.fallback_mode == 'return'``,
+        or classes w/ fallback mask if ``self.fallback_mode == 'store'``.
         """
         y_out = self.outlier_detector_.predict(X)
         fallback_mask = y_out == -1

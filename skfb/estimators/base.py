@@ -200,7 +200,7 @@ class BaseFallbackClassifier(
 
         Returns
         -------
-        Depending on ``self.fallback_mask``:
+        Depending on ``self.fallback_mode``:
         * ("return") a numpy ndarray of both predictions and fallbacks, or;
         * ("store")  an fbndarray of predictions storing also fallback mask, or;
         * ("ignore") a numpy ndarray of only estimator's predictions.
@@ -237,7 +237,7 @@ class BaseFallbackClassifier(
             Predicted class probabilities for `X` based on the estimator.
             The order of the classes corresponds to that in the fitted
             attribute :term:`classes_`.
-            If ``self.fallback_mask == "ignore"``, returns an ndarray.
+            If ``self.fallback_mode == "ignore"``, returns an ndarray.
         """
         check_is_fitted(self, attributes="is_fitted_")
 
@@ -300,7 +300,7 @@ class BaseFallbackClassifier(
             Predicted class log-probabilities for `X` based on the estimator.
             The order of the classes corresponds to that in the fitted
             attribute :term:`classes_`.
-            If ``self.fallback_mask == "ignore"``, returns an ndarray.
+            If ``self.fallback_mode == "ignore"``, returns an ndarray.
         """
         y_prob = self.predict_proba(X)
         return np.log(y_prob)
