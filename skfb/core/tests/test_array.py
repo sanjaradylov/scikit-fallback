@@ -57,7 +57,7 @@ def test_successful_fbndarray(predictions, fallback_mask):
 
     y_comb = np.asarray(predictions).copy()
     fallback_mask = np.asarray(fallback_mask, dtype=np.bool_)
-    fallback_label = 3
+    fallback_label = np.asarray(3, dtype=y_pred.dtype)
     y_comb[fallback_mask] = fallback_label
 
     np.testing.assert_array_equal(

@@ -3,15 +3,11 @@
 __all__ = ("AnomalyFallbackClassifier",)
 
 import numpy as np
-
-# pylint: disable=import-error,no-name-in-module
-# pyright: reportMissingModuleSource=false
-from sklearn.utils._param_validation import HasMethods
 from sklearn.utils.metaestimators import available_if
 from sklearn.utils.validation import check_is_fitted, NotFittedError
 
 from ..core import array as ska
-from ..utils._legacy import validate_params
+from ..utils._legacy import HasMethods, validate_params
 from .base import BaseFallbackClassifier, _estimator_has
 
 
