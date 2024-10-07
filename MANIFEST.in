@@ -1,0 +1,6 @@
+include LICENSE
+include pyproject.toml
+include README.md
+
+prune examples/
+prune skfb/**/tests/

@@ -80,7 +80,8 @@ def test_successful_predict_accept_confusion_matrix(y_true, y_pred, cm_true):
     ],
 )
 def test_failed_predict_accept_confusion_matrix(y_true, y_pred):
-    with pytest.raises(ValueError):
+    # ??? AttributeError - for sklearn<1.2, ValueError - otherwise.
+    with pytest.raises((AttributeError, ValueError)):
         predict_accept_confusion_matrix(y_true, y_pred)
 
 

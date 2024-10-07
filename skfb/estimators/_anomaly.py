@@ -3,15 +3,11 @@
 __all__ = ("AnomalyFallbackClassifier",)
 
 import numpy as np
-
-# pylint: disable=import-error,no-name-in-module
-# pyright: reportMissingModuleSource=false
-from sklearn.utils._param_validation import HasMethods
 from sklearn.utils.metaestimators import available_if
 from sklearn.utils.validation import check_is_fitted, NotFittedError
 
 from ..core import array as ska
-from ..utils._legacy import validate_params
+from ..utils._legacy import HasMethods, validate_params
 from .base import BaseFallbackClassifier, _estimator_has
 
 
@@ -136,8 +132,8 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
     def _predict(self, X):
         """Runs outlier detection and classification.
 
-        Returns both fallbacks and classes if ``self.fallback_mask == 'return'``,
-        or classes w/ fallback mask if ``self.fallback_mask == 'store'``.
+        Returns both fallbacks and classes if ``self.fallback_mode == 'return'``,
+        or classes w/ fallback mask if ``self.fallback_mode == 'store'``.
         """
         y_out = self.outlier_detector_.predict(X)
         fallback_mask = y_out == -1

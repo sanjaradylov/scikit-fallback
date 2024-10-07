@@ -9,17 +9,15 @@ from sklearn.metrics import accuracy_score, auc
 from sklearn.preprocessing import LabelEncoder
 from sklearn.utils import check_array
 
-# pylint: disable=import-error,no-name-in-module
-# pyright: reportMissingModuleSource=false
-from sklearn.utils._param_validation import (
-    Interval,
-    Real,
-    StrOptions,
-)
 from sklearn.utils.multiclass import type_of_target
 
 from ..core.array import fbarray
-from ..utils._legacy import validate_params
+from ..utils._legacy import (
+    Interval,
+    Real,
+    StrOptions,
+    validate_params,
+)
 from ._common import prediction_quality
 
 

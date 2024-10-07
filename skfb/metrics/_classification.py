@@ -18,16 +18,18 @@ from sklearn.metrics import (
     zero_one_loss,
 )
 
-# pylint: disable=import-error,no-name-in-module
-# pyright: reportMissingModuleSource=false
-from sklearn.utils._param_validation import Interval, Real, StrOptions
 from sklearn.utils import check_consistent_length, column_or_1d
 from sklearn.utils.multiclass import type_of_target
 
 import numpy as np
 
 from ..core import array as ska
-from ..utils._legacy import validate_params
+from ..utils._legacy import (
+    Interval,
+    Real,
+    StrOptions,
+    validate_params,
+)
 from ._common import prediction_quality
 
 
@@ -55,7 +57,7 @@ def predict_accept_confusion_matrix(
     y_true : array-like of shape (n_samples,)
         Ground truth (correct) target values.
 
-    y_pred : array-like of shape (n_samples,)
+    y_pred : FBNDArray of shape (n_samples,)
         Estimated targets as returned by both a rejector and a classifier.
 
     labels : array-like of shape (2,), default=None

@@ -73,3 +73,5 @@ target/
 
 # Temporary files
 .temp/
+
+**/.DS_Store

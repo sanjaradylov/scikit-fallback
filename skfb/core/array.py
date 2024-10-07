@@ -22,7 +22,7 @@ class FBNDArray(np.ndarray):
     ----------
     predictions : array-like of shape (n_samples,)
         An array of base-estimator predictions.
-    fallback_mask : array-like of shape (n_samples,) or None
+    fallback_mask : array-like of shape (n_samples,) or (1, n_samples), or None
         Array mask indicating whether i-th sample was rejected by a
         fallback meta-estimator. If None, defaults to all-zeros.
         Further stored as sparse arrays by the ``fallback_mask`` property.
@@ -94,11 +94,14 @@ class FBNDArray(np.ndarray):
         return self.fallback_mask.count_nonzero() / len(self)
 
     def get_dense_fallback_mask(self):
-        """Converts ``fallback_mask`` to ndarray."""
-        return self.fallback_mask.toarray()
+        """Converts ``fallback_mask`` to 1D ndarray."""
+        mask = self.fallback_mask.toarray()
+        if mask.ndim == 2:  # For scipy<1.13
+            mask = mask[0]
+        return mask
 
     def get_dense_neg_fallback_mask(self):
-        """Returns negation of ``fallback_mask`` (acceptance mask) as ndarray."""
+        """Returns negation of ``fallback_mask`` (acceptance mask) as 1D ndarray."""
         return ~self.get_dense_fallback_mask()
 
     def as_comb(self, fallback_label=-1):

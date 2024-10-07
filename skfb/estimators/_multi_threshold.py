@@ -5,6 +5,8 @@ __all__ = (
     "MultiThresholdFallbackClassifier",
 )
 
+import warnings
+
 import numpy as np
 
 from scipy.stats import uniform
@@ -12,23 +14,34 @@ from scipy.stats import uniform
 from sklearn.base import clone
 from sklearn.metrics import get_scorer_names
 from sklearn.model_selection import check_cv, ParameterSampler
-from sklearn.utils.parallel import delayed, Parallel
+
+try:
+    from sklearn.utils.parallel import delayed, Parallel
+except ModuleNotFoundError:
+    from joblib import Parallel
+
+    # pylint: disable=ungrouped-imports
+    from sklearn.utils.fixes import delayed
+
+    warnings.warn(
+        "Using ``joblib.Parallel`` for ``MultiTresholdFallbackClassifierCV`` instead "
+        "of ``sklearn.utils.parallel.Parallel``, which was added in sklearn 1.3.",
+        category=ImportWarning,
+    )
+
 from sklearn.utils.validation import check_is_fitted, NotFittedError
 
-# pylint: disable=import-error,no-name-in-module
-# pyright: reportMissingModuleSource=false
-from sklearn.utils._param_validation import (
+from .base import BaseFallbackClassifier
+from ..core import array as ska
+from ..metrics._classification import get_scoring
+from ..utils._legacy import (
     HasMethods,
     Integral,
     Interval,
     Real,
     StrOptions,
+    validate_params,
 )
-
-from .base import BaseFallbackClassifier
-from ..core import array as ska
-from ..metrics._classification import get_scoring
-from ..utils._legacy import validate_params
 
 
 def _is_top_low(y_score, thresholds):
