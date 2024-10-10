@@ -24,3 +24,9 @@ pipelines to predict and reject correctly.
 .. note::
 
    This project is under active development.
+
+
+.. toctree::
+
+   installation
+   api
