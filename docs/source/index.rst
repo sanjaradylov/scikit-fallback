@@ -27,6 +27,7 @@ pipelines to predict and reject correctly.
 
 
 .. toctree::
+   :maxdepth: 2
 
    installation
    api

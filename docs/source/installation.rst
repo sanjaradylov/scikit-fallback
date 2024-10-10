@@ -1,5 +1,5 @@
-Installing `scikit-fallback`!
-=============================
+Installing ``scikit-fallback``
+==============================
 
 **scikit-fallback** supports Python 3.9+ and depends on ``scikit-learn>=1.0``, `numpy`,
 and ``scipy``. An optional requirement is ``matplotlib`` (for visualization of metrics

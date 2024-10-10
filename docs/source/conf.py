@@ -1,12 +1,18 @@
 """Configuration file for the Sphinx documentation builder."""
 
+import os
+import sys
+
+
+sys.path.insert(0, os.path.abspath("../.."))
+
 # region Project information
 project = "scikit-fallback"
 copyright = "2024, Sanjar Ad[yi]lov"  # pylint: disable=redefined-builtin
 author = "Sanjar Ad[yi]lov"
 
 release = "0.1"
-version = "0.1.0"
+version = "0.1.1"
 # endregion
 
 # region General configuration
