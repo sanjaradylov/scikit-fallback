@@ -5,4 +5,4 @@ The ``skfb.core.array`` module implements an NDArray for both rejection-aware an
 rejection-unaware evaluation.
 
 .. autoclass:: skfb.core.array.FBNDArray
-    :inherited-members:
+    :members:

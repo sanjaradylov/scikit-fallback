@@ -10,16 +10,16 @@ The following fallback estimators accept and/or learn the certainty threshold(s)
 rule-based rejection.
 
 .. autoclass:: skfb.estimators.ThresholdFallbackClassifier
-    :inherited-members:
+    :inherited-members: fit, predict, predict_proba, predict_log_proba, decision_function
 
 .. autoclass:: skfb.estimators.ThresholdFallbackClassifierCV
-    :inherited-members:
+    :inherited-members: fit, predict, predict_proba, predict_log_proba, decision_function
 
 .. autoclass:: skfb.estimators.MultiThresholdFallbackClassifier
-    :inherited-members:
+    :inherited-members: fit, predict, predict_proba, predict_log_proba, decision_function
 
 .. autoclass:: skfb.estimators.RateFallbackClassifierCV
-    :inherited-members:
+    :inherited-members: fit, predict, predict_proba, predict_log_proba, decision_function
 
 
 Anomaly-Based Fallback Classifiers
@@ -28,4 +28,5 @@ Anomaly-Based Fallback Classifiers
 These fallback estimators reject based on outlier/novelty classification.
 
 .. autoclass:: skfb.estimators.AnomalyFallbackClassifier
-    :inherited-members:
+    :members:
+    :inherited-members: predict
