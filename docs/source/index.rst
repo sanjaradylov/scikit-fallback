@@ -1,5 +1,5 @@
 Welcome to ``scikit-fallback``'s documentation!
-=============================================
+===============================================
 
 **scikit-fallback** (*scikit* - compatible with `scikit-learn <https://scikit-learn.org>`_,
 *fallback* - abstention from taking actions) is a lightweight Python package for machine

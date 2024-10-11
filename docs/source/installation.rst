@@ -1,5 +1,5 @@
-Installing ``scikit-fallback``
-==============================
+Installation
+============
 
 **scikit-fallback** supports Python 3.9+ and depends on ``scikit-learn>=1.0``, `numpy`,
 and ``scipy``. An optional requirement is ``matplotlib`` (for visualization of metrics
@@ -10,7 +10,7 @@ Install with ``pip``
 
 Usually these dependencies all pre-installed in any ML-powered
 environment; otherwise, **scikit-fallback** tries installing newer versions of the
-dependencies along with itself:::
+dependencies along with itself::
 
     pip install -U scikit-fallback
 
@@ -26,7 +26,7 @@ Build from Source
 -----------------
 
 To build **scikit-fallback** from source, clone the project, set up an environment,
-install the package and all the dependencies:::
+install the package and all the dependencies::
 
 
     git clone https://github.com/sanjaradylov/scikit-fallback.git
