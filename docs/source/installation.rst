@@ -18,7 +18,7 @@ dependencies along with itself::
 
    You might encounter warnings from **scikit-fallback** if you have
    ``scikit-learn<1.3``. They are about several private features of ``scikit-learn``
-   and shouldn't affect performance and API. Also, note that some older version of
+   and shouldn't affect performance and API. Also, note that some older versions of
    ``scikit-learn`` don't support ``numpy~=2.0``.
 
 

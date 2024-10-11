@@ -24,10 +24,3 @@ pipelines to predict and reject correctly.
 .. note::
 
    This project is under active development.
-
-
-.. toctree::
-   :maxdepth: 2
-
-   installation
-   api

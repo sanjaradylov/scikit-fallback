@@ -1,8 +1,20 @@
 API Reference
 =============
 
-.. autosummary::
-   :toctree: generated
-   :recursive:
+Three major components of ``scikit-fallback`` are *core*, *estimators*, and *metrics*.
 
-   skfb
+.. toctree::
+   :maxdepth: 3
+
+   core
+   estimators
+   metrics
+
+.. note::
+
+   There are experimental features that can be enabled.
+   .. autosummary::
+      :toctree: generated
+      :recursive:
+
+      skfb.experimental
