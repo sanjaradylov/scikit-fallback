@@ -72,7 +72,7 @@ class BaseFallbackClassifier(
         While predicting, whether to return:
 
         * (``"return"``) a numpy ndarray of both predictions and fallbacks;
-        * (``"store"``)  an fbndarray of predictions storing also fallback mask;
+        * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
         * (``"ignore"``) a numpy ndarray of only estimator's predictions.
     """
 
@@ -203,11 +203,11 @@ class BaseFallbackClassifier(
 
         Returns
         -------
-        y_pred : ndarray or fbndarray of shape (n_samples,)
+        y_pred : ndarray or FBNDArray of shape (n_samples,)
             Depending on ``self.fallback_mode``:
 
             * (``"return"``) a numpy ndarray of both predictions and fallbacks, or;
-            * (``"store"``)  an fbndarray of predictions storing also fallback mask, or;
+            * (``"store"``)  an FBNDArray of predictions storing also fallback mask, or;
             * (``"ignore"``) a numpy ndarray of only estimator's predictions.
         """
         check_is_fitted(self, attributes="is_fitted_")
@@ -227,7 +227,7 @@ class BaseFallbackClassifier(
     def predict_proba(self, X):
         """Calls ``predict_proba`` on the estimator.
 
-        If fallback_mode != "ignore", returns fbndarray w/ fallback mask.
+        If fallback_mode != "ignore", returns FBNDArray w/ fallback mask.
 
         Parameters
         ----------
@@ -290,7 +290,7 @@ class BaseFallbackClassifier(
     def predict_log_proba(self, X):
         """Returns log of ``predict_proba`` on the estimator.
 
-        If fallback_mode != "ignore", returns fbndarray w/ fallback mask.
+        If fallback_mode != "ignore", returns FBNDArray w/ fallback mask.
 
         Parameters
         ----------
@@ -337,7 +337,7 @@ class BaseFallbackClassifier(
             Depending on ``self.fallback_mode``:
 
             * (``"return"``) a numpy ndarray of both predictions and fallbacks;
-            * (``"store"``)  an fbndarray of predictions storing also fallback mask;
+            * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
             * (``"ignore"``) a numpy ndarray of only estimator's predictions.
 
         See also

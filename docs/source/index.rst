@@ -24,10 +24,10 @@ objects to either predict fallback labels so that your pipelines hand the corres
 samples off to other systems, or store fallback masks to evaluate the ability of your
 pipelines to predict and reject correctly.
 
+----
 
-.. note::
-
-   This project is under active development.
+Take a look at the `Medium series <https://medium.com/@sshadylov>`_ on machine learning
+with a reject option for more motivation and information on usage.
 
 
 Contents
@@ -52,5 +52,7 @@ following survey:
    *Machine learning with a reject option: a survey.* Mach Learn 113, 3073–3110 (2024).
    https://doi.org/10.1007/s10994-024-06534-x
 
-Also, take a look at the `Medium series <https://medium.com/@sshadylov>`_ on machine
-learning with a reject option for motivation and information on usage.
+
+.. note::
+
+   This project is under active development.

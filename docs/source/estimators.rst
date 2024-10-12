@@ -21,6 +21,9 @@ rule-based rejection.
 .. autoclass:: skfb.estimators.RateFallbackClassifierCV
     :inherited-members: fit, predict, predict_proba, predict_log_proba, decision_function
 
+.. autofunction:: skfb.estimators.predict_or_fallback
+
+.. autofunction:: skfb.estimators.multi_threshold_predict_or_fallback
 
 Anomaly-Based Fallback Classifiers
 ----------------------------------

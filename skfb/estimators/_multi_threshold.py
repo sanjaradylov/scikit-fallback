@@ -108,7 +108,7 @@ def multi_threshold_predict_or_fallback(
         Whether to have:
 
         * (``"return"``) a numpy ndarray of both predictions and fallbacks;
-        * (``"store"``)  an fbndarray of predictions storing also fallback mask;
+        * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
         * (``"ignore"``) a numpy ndarray of only estimator's predictions.
     return_probas : bool, default=False
         Whether to return also probabilities.
@@ -179,7 +179,7 @@ class MultiThresholdFallbackClassifier(BaseFallbackClassifier):
         While predicting, whether to return:
 
         * (``"return"``) a numpy ndarray of both predictions and fallbacks;
-        * (``"store"``)  an fbndarray of predictions storing also fallback mask;
+        * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
         * (``"ignore"``) a numpy ndarray of only estimator's predictions.
 
     Examples
@@ -373,7 +373,7 @@ class MultiThresholdFallbackClassifierCV(MultiThresholdFallbackClassifier):
         While predicting, whether to return:
 
         * (``"return"``) a numpy ndarray of both predictions and fallbacks;
-        * (``"store"``)  an fbndarray of predictions storing also fallback mask;
+        * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
         * (``"ignore"``) a numpy ndarray of only estimator's predictions.
 
     Examples

@@ -29,7 +29,7 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
         While predicting, whether to return:
 
         * (``"return"``) a numpy ndarray of both predictions and fallbacks;
-        * (``"store"``)  an fbndarray of predictions storing also fallback mask;
+        * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
         * (``"ignore"``) a numpy ndarray of only estimator's predictions.
 
     Examples
