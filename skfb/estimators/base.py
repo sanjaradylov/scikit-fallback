@@ -203,11 +203,12 @@ class BaseFallbackClassifier(
 
         Returns
         -------
-        Depending on ``self.fallback_mode``:
+        y_pred : ndarray or fbndarray of shape (n_samples,)
+            Depending on ``self.fallback_mode``:
 
-        * (``"return"``) a numpy ndarray of both predictions and fallbacks, or;
-        * (``"store"``)  an fbndarray of predictions storing also fallback mask, or;
-        * (``"ignore"``) a numpy ndarray of only estimator's predictions.
+            * (``"return"``) a numpy ndarray of both predictions and fallbacks, or;
+            * (``"store"``)  an fbndarray of predictions storing also fallback mask, or;
+            * (``"ignore"``) a numpy ndarray of only estimator's predictions.
         """
         check_is_fitted(self, attributes="is_fitted_")
 
@@ -334,9 +335,10 @@ class BaseFallbackClassifier(
         -------
         score : float
             Depending on ``self.fallback_mode``:
-            * ("return") prediction quality (accuracy on accepted examples), or;
-            * ("store")  prediction-rejection accuracy, or;
-            * ("ignore") accuracy w/o fallbacks.
+
+            * (``"return"``) a numpy ndarray of both predictions and fallbacks;
+            * (``"store"``)  an fbndarray of predictions storing also fallback mask;
+            * (``"ignore"``) a numpy ndarray of only estimator's predictions.
 
         See also
         --------

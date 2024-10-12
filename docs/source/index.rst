@@ -52,5 +52,5 @@ following survey:
    *Machine learning with a reject option: a survey.* Mach Learn 113, 3073–3110 (2024).
    https://doi.org/10.1007/s10994-024-06534-x
 
-Also, take a look at the `Medium series`_ on machine learning with a reject option for
-motivation and information on usage.
+Also, take a look at the `Medium series <https://medium.com/@sshadylov>`_ on machine
+learning with a reject option for motivation and information on usage.
