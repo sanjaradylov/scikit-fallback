@@ -1,9 +1,13 @@
 ![PyPi](https://img.shields.io/pypi/v/scikit-fallback)
-![Python package workflow](https://github.com/sanjaradylov/scikit-fallback/actions/workflows/python-package.yml/badge.svg)
+[![Downloads](https://static.pepy.tech/badge/scikit-fallback)](https://pepy.tech/project/scikit-fallback)
 ![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)
+[![CodeFactor](https://www.codefactor.io/repository/github/sanjaradylov/scikit-fallback/badge)](https://www.codefactor.io/repository/github/sanjaradylov/scikit-fallback)
+![Python package workflow](https://github.com/sanjaradylov/scikit-fallback/actions/workflows/python-package.yml/badge.svg)
 [![PythonVersion](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue)](https://www.python.org/downloads/release/python-3913/)
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![linting: pylint](https://img.shields.io/badge/linting-pylint-yellowgreen)](https://github.com/PyCQA/pylint)
+[![Twitter](https://img.shields.io/twitter/url?style=social&url=https%3A%2F%2Fgithub.com%2Fsanjaradylov%2Fscikit-fallback)](https://x.com/intent/tweet?text=Wow:%20https%3A%2F%2Fgithub.com%2Fsanjaradylov%2Fscikit-fallback%20@sanjaradylov)
+[![Twitter Follow](https://img.shields.io/twitter/follow/sanjaradylov?style=social)](https://twitter.com/sanjaradylov)
 
 **scikit-fallback** is a scikit-learn-compatible Python package for machine learning
 with a reject option.
@@ -37,17 +41,21 @@ rejector.fit(X_train, y_train)  # Train base estimator and learn best threshold
 rejector.score(X_test, y_test)  # Compute acceptance-correctness accuracy score
 ```
 
-For more information, see the project's [Wiki](https://github.com/sanjaradylov/scikit-fallback/wiki).
+And for more motivation and information on usage, please visit our
+[documentation](https://scikit-fallback.readthedocs.io/en/latest/index.html)
+and refer to the
+[Medium series](https://medium.com/@sshadylov) on machine learning with a reject option.
 
 
 ### 🏗 Installation
 `scikit-fallback` requires:
 * Python (>=3.9,<3.13)
 * scikit-learn (>=1.0)
+* numpy
+* scipy
 * matplotlib (>=3.0) (optional)
 
-If you already have `scikit-learn` installed and it's `scikit-learn<=1.2`, make sure that `numpy<2.0`
-to prevent incompatibility issues.
+and along with the requirements can be installed via `pip` :
 
 ```bash
 pip install -U scikit-fallback
@@ -56,7 +64,8 @@ pip install -U scikit-fallback
 
 ### 📚 Examples
 
-See the [`examples/`](examples/) directory for various applications of fallback estimators
+See the [`examples/`]([examples/](https://github.com/sanjaradylov/scikit-fallback/tree/main/examples))
+directory for various applications of fallback estimators
 and scorers to scikit-learn-compatible pipelines.
 
 ### 🔗 References

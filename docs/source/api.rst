@@ -19,3 +19,8 @@ There are experimental features that can be enabled.
     :recursive:
 
     skfb.experimental
+
+----
+
+For more implementation details, checkout **scikit-fallback**'s
+`Github <https://github.com/sanjaradylov/scikit-fallback>`_ page.

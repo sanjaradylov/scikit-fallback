@@ -2,5 +2,7 @@ include LICENSE
 include pyproject.toml
 include README.md
 
+exclude docs/
+
 prune examples/
 prune skfb/**/tests/

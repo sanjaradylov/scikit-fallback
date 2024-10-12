@@ -12,7 +12,7 @@ copyright = "2024, Sanjar Ad[yi]lov"  # pylint: disable=redefined-builtin
 author = "Sanjar Ad[yi]lov"
 
 release = "0.1.1"
-version = ""
+version = "0.1"
 # endregion
 
 # region General configuration
