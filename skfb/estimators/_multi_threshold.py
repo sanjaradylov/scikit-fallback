@@ -106,9 +106,10 @@ def multi_threshold_predict_or_fallback(
         Rejected samples are labeled w/ this label.
     fallback_mode : {"store", "return", "ignore"}, default="return"
         Whether to have:
-        * ("return") a numpy ndarray of both predictions and fallbacks;
-        * ("store")  an fbndarray of predictions storing also fallback mask;
-        * ("ignore") a numpy ndarray of only estimator's predictions.
+
+        * (``"return"``) a numpy ndarray of both predictions and fallbacks;
+        * (``"store"``)  an fbndarray of predictions storing also fallback mask;
+        * (``"ignore"``) a numpy ndarray of only estimator's predictions.
     return_probas : bool, default=False
         Whether to return also probabilities.
 
@@ -176,9 +177,10 @@ class MultiThresholdFallbackClassifier(BaseFallbackClassifier):
         Should be compatible w/ the class labels from training data.
     fallback_mode : {"return", "store", "ignore"}, default="store"
         While predicting, whether to return:
-        * ("return") a numpy ndarray of both predictions and fallbacks;
-        * ("store")  an fbndarray of predictions storing also fallback mask;
-        * ("ignore") a numpy ndarray of only estimator's predictions.
+
+        * (``"return"``) a numpy ndarray of both predictions and fallbacks;
+        * (``"store"``)  an fbndarray of predictions storing also fallback mask;
+        * (``"ignore"``) a numpy ndarray of only estimator's predictions.
 
     Examples
     --------
@@ -369,9 +371,10 @@ class MultiThresholdFallbackClassifierCV(MultiThresholdFallbackClassifier):
         Should be compatible w/ the class labels from training data.
     fallback_mode : {"return", "store", "ignore"}, default="store"
         While predicting, whether to return:
-        * ("return") a numpy ndarray of both predictions and fallbacks;
-        * ("store")  an fbndarray of predictions storing also fallback mask;
-        * ("ignore") a numpy ndarray of only estimator's predictions.
+
+        * (``"return"``) a numpy ndarray of both predictions and fallbacks;
+        * (``"store"``)  an fbndarray of predictions storing also fallback mask;
+        * (``"ignore"``) a numpy ndarray of only estimator's predictions.
 
     Examples
     --------

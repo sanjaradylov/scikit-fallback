@@ -11,8 +11,8 @@ project = "scikit-fallback"
 copyright = "2024, Sanjar Ad[yi]lov"  # pylint: disable=redefined-builtin
 author = "Sanjar Ad[yi]lov"
 
-release = "0.1"
-version = "0.1.1"
+release = "0.1.1"
+version = ""
 # endregion
 
 # region General configuration
@@ -22,6 +22,9 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.intersphinx",
+    "sphinx.ext.viewcode",
+    "sphinx.ext.napoleon",
+    "numpydoc",
 ]
 autosummary_generate = True  # Turn on sphinx.ext.autosummary
 
@@ -32,6 +35,8 @@ intersphinx_mapping = {
 intersphinx_disabled_domains = ["std"]
 
 templates_path = ["_templates"]
+
+pygments_style = None
 # endregion
 
 # Options for HTML output

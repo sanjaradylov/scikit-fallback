@@ -1,7 +1,7 @@
 Installation
 ============
 
-**scikit-fallback** supports Python 3.9+ and depends on ``scikit-learn>=1.0``, `numpy`,
+**scikit-fallback** supports Python 3.9+ and depends on ``scikit-learn>=1.0``, ``numpy``,
 and ``scipy``. An optional requirement is ``matplotlib`` (for visualization of metrics
 from ``skfb.metrics``).
 
@@ -31,6 +31,7 @@ install the package and all the dependencies::
 
     git clone https://github.com/sanjaradylov/scikit-fallback.git
     cd scikit-fallback
-    # Your environment activation here
+    # Your environment activation here, e.g., venv
     python -m pip install -e ".[tests]"
+    pre-commit install
     pre-commit run --all-files

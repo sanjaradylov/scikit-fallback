@@ -91,10 +91,11 @@ def predict_or_fallback(
     fallback_label : any, default=-1
         Rejected samples are labeled w/ this label.
     fallback_mode : {"store", "return", "ignore"}, default="return"
-        While predicting, whether to return:
-        * ("return") a numpy ndarray of both predictions and fallbacks;
-        * ("store")  an fbndarray of predictions storing also fallback mask;
-        * ("ignore") a numpy ndarray of only estimator's predictions.
+        Whether to have:
+
+        * (``"return"``) a numpy ndarray of both predictions and fallbacks;
+        * (``"store"``)  an fbndarray of predictions storing also fallback mask;
+        * (``"ignore"``) a numpy ndarray of only estimator's predictions.
 
     Returns
     -------
@@ -137,9 +138,10 @@ class ThresholdFallbackClassifier(BaseFallbackClassifier):
         Should be compatible w/ the class labels from training data.
     fallback_mode : {"return", "store", "ignore"}, default="store"
         While predicting, whether to return:
-        * ("return") a numpy ndarray of both predictions and fallbacks;
-        * ("store")  an fbndarray of predictions storing also fallback mask;
-        * ("ignore") a numpy ndarray of only estimator's predictions.
+
+        * (``"return"``) a numpy ndarray of both predictions and fallbacks;
+        * (``"store"``)  an fbndarray of predictions storing also fallback mask;
+        * (``"ignore"``) a numpy ndarray of only estimator's predictions.
 
     Examples
     --------
@@ -282,9 +284,10 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
         Should be compatible w/ the class labels from training data.
     fallback_mode : {"return", "store", "ignore"}, default="store"
         While predicting, whether to return:
-        * ("return") a numpy ndarray of both predictions and fallbacks;
-        * ("store")  an fbndarray of predictions storing also fallback mask;
-        * ("ignore") a numpy ndarray of only estimator's predictions.
+
+        * (``"return"``) a numpy ndarray of both predictions and fallbacks;
+        * (``"store"``)  an fbndarray of predictions storing also fallback mask;
+        * (``"ignore"``) a numpy ndarray of only estimator's predictions.
 
     Examples
     --------
@@ -493,9 +496,10 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
         Should be compatible w/ the class labels from training data.
     fallback_mode : {"return", "store"}, default="store"
         While predicting, whether to return:
-        * ("return") a numpy ndarray of both predictions and fallbacks;
-        * ("store")  an fbndarray of predictions storing also fallback mask;
-        * ("ignore") a numpy ndarray of only estimator's predictions.
+
+        * (``"return"``) a numpy ndarray of both predictions and fallbacks;
+        * (``"store"``)  an fbndarray of predictions storing also fallback mask;
+        * (``"ignore"``) a numpy ndarray of only estimator's predictions.
 
     Examples
     --------

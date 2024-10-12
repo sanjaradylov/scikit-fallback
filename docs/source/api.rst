@@ -10,7 +10,7 @@ Three major components of ``scikit-fallback`` are *core*, *estimators*, and *met
    estimators
    metrics
 
----
+----
 
 There are experimental features that can be enabled.
 

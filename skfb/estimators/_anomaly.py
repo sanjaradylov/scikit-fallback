@@ -27,9 +27,10 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
         Should be compatible w/ the class labels from training data.
     fallback_mode : {"return", "store", "ignore"}, default="store"
         While predicting, whether to return:
-        * ("return") a numpy ndarray of both predictions and fallbacks;
-        * ("store")  an fbndarray of predictions storing also fallback mask;
-        * ("ignore") a numpy ndarray of only estimator's predictions.
+
+        * (``"return"``) a numpy ndarray of both predictions and fallbacks;
+        * (``"store"``)  an fbndarray of predictions storing also fallback mask;
+        * (``"ignore"``) a numpy ndarray of only estimator's predictions.
 
     Examples
     --------
