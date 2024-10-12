@@ -6,7 +6,11 @@ Welcome to ``scikit-fallback``'s documentation!
 learning with a reject option offering various tools to build estimators and scorers
 supporting *fallbacks*, or *rejections*.
 
-Assume that your domain can have:
+
+Motivaion
+---------
+
+There are several reasons why rejections become essential. Assume that your domain can have:
 
 * *more classes than what your classifier was trained* on (e.g., an unexpected buy_pizza
   intent encountered by your dialogue systems for bank applications);
@@ -26,8 +30,27 @@ pipelines to predict and reject correctly.
    This project is under active development.
 
 
+Contents
+--------
+
 .. toctree::
    :maxdepth: 2
 
    installation
    api
+
+
+References
+----------
+
+Research in machine learning with rejections and selective classification is evolving,
+and there are many valuable works available online including from top conferences like
+NeurIPS and ICML. Some of the components of **scikit-fallback** were inspired by the
+following survey:
+
+.. [1] Hendrickx, K., Perini, L., Van der Plas, D. et al.
+   *Machine learning with a reject option: a survey.* Mach Learn 113, 3073–3110 (2024).
+   https://doi.org/10.1007/s10994-024-06534-x
+
+Also, take a look at the `Medium series`_ on machine learning with a reject option for
+motivation and information on usage.
