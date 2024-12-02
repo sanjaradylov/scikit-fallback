@@ -2,11 +2,9 @@
 
 from typing import Sequence
 
-import inspect
-
 import numpy as np
 
-from sklearn.base import BaseEstimator, ClassifierMixin, check_is_fitted, clone
+from sklearn.base import BaseEstimator, ClassifierMixin, check_is_fitted
 from sklearn.metrics import accuracy_score
 from sklearn.utils.multiclass import unique_labels
 
@@ -22,8 +20,11 @@ from ..utils._legacy import (
     _fit_context,
     Integral,
     Interval,
+    Real,
+    StrOptions,
     validate_params,
 )
+from ._common import fit_one
 
 
 class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
@@ -41,6 +42,9 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         strongest (e.g., gradient boosting).
     thresholds : float or array-like of float, length n_estimators - 1
         Deferral thresholds for each base estimators except the first.
+    response_method : {"predict_proba", "decision_function"}, default="predict_proba"
+        Methods by ``estimators`` for which we want to find return deferral thresholds.
+        For ``"decision_function"``, ``thresholds`` can be negative.
     n_jobs : int, default=None
         Number of parallel jobs used during training.
     verbose : int, default=False
@@ -49,7 +53,7 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
     Examples
     --------
     >>> import numpy as np
-    >>> from skfb.cascade import ThresholdCascadeClassifier
+    >>> from skfb.ensemble import ThresholdCascadeClassifier
     >>> from sklearn.ensemble import RandomForestClassifier
     >>> from sklearn.linear_model import LogisticRegression
     >>> X = np.array([
@@ -72,18 +76,23 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
 
     _parameter_constraints = {
         "estimators": ["array-like"],
-        "thresholds": ["array-like"],
+        "thresholds": ["array-like", Interval(Real, None, None, closed="neither")],
+        "response_method": [StrOptions({"decision_function", "predict_proba"})],
         "n_jobs": [Interval(Integral, -1, None, closed="left"), None],
         "verbose": ["verbose"],
     }
 
-    def __init__(self, estimators, thresholds, n_jobs=None, verbose=False):
+    def __init__(
+        self,
+        estimators,
+        thresholds,
+        response_method="predict_proba",
+        n_jobs=None,
+        verbose=False,
+    ):
         self.estimators = estimators
-
-        if isinstance(thresholds, float):
-            thresholds = [thresholds] * (len(estimators) - 1)
-        self.thresholds = thresholds
-
+        self.response_method = response_method
+        self._set_thresholds(thresholds)
         self.n_jobs = n_jobs
         self.verbose = verbose
 
@@ -116,10 +125,11 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         self.classes_ = unique_labels(y)
 
         self.estimators_ = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
-            delayed(_fit_one)(estimator, X, y, sample_weight)
+            delayed(fit_one)(estimator, X, y, sample_weight)
             for estimator in self.estimators
         )
         self._current_estimators = self.estimators_[:]
+        self._current_thresholds = self.thresholds[:]
 
         self.is_fitted_ = True
 
@@ -152,18 +162,16 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         """
         check_is_fitted(self, attributes="is_fitted_")
 
-        acceptance_mask = np.ones(len(X), dtype=bool)
-        thresholds = list(self.thresholds) + [0.0]
-        y_prob = np.zeros((len(X), len(self.classes_)), dtype=float)
+        is_binary = len(self.classes_) == 2
 
-        for estimator, threshold in zip(self._current_estimators, thresholds):
-            y_prob[acceptance_mask] = estimator.predict_proba(X[acceptance_mask, :])
-            acceptance_mask ^= y_prob.max(axis=1) >= threshold
-
-            if acceptance_mask.sum() == 0:
-                break
-
-        return y_prob.argmax(axis=1)
+        # Process decision scores for binary classification
+        if is_binary and self.response_method == "decision_function":
+            y_score = self._predict_binary_class_scores(X)
+            return np.take(self.classes_, y_score >= 0.0)
+        # Process decision scores/probas for multiclass classification
+        else:
+            y_score = self._predict_multi_class_scores(X)
+            return np.take(self.classes_, y_score.argmax(axis=1))
 
     @validate_params(
         {
@@ -191,16 +199,7 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
             Probabilities predicted by the base estimators.
         """
         check_is_fitted(self, attributes="is_fitted_")
-
-        acceptance_mask = np.ones(len(X), dtype=bool)
-        thresholds = list(self.thresholds) + [0.0]
-        y_prob = np.zeros((len(X), len(self.classes_)), dtype=float)
-
-        for estimator, threshold in zip(self._current_estimators, thresholds):
-            y_prob[acceptance_mask] = estimator.predict_proba(X[acceptance_mask, :])
-            acceptance_mask ^= y_prob.max(axis=1) >= threshold
-
-        return y_prob
+        return self._predict_multi_class_scores(X)
 
     @validate_params(
         {
@@ -229,14 +228,32 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         """
         return np.log(self.predict_proba(X))
 
-    def decision_function(self, _):
-        """TODO: Will be implemented for thresholds supporting non-probabilities.
+    def decision_function(self, X):
+        """Predicts decision scores using one or more base estimators.
 
-        Raises
-        ------
-        NotImplementedError
+        Tries estimators in the order specified during initialization. If the first
+        estimator doesn't have a score higher or equal than the first threshold,
+        switches to the second estimator, and so on. The last estimator always makes
+        predictions.
+
+        Parameters
+        ----------
+        X : indexable, length n_samples
+            Input samples to classify.
+            Must fulfill the input assumptions of the underlying estimators.
+
+        Returns
+        -------
+        y_score : ndarray of shape n_samples
+            Decision scores predicted by the base estimators.
         """
-        raise NotImplementedError("Not available for now; consider predict_log_proba.")
+        check_is_fitted(self, attributes="is_fitted_")
+
+        is_binary = len(self.classes_) == 2
+        if is_binary:
+            return self._predict_binary_class_scores(X)
+        else:
+            return self._predict_multi_class_scores(X)
 
     @validate_params(
         {
@@ -268,11 +285,58 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
 
         return accuracy_score(y, self.predict(X), sample_weight=sample_weight)
 
+    def _set_thresholds(self, thresholds):
+        """Transforms ``thresholds`` into correct sequence of thresholds."""
+        if isinstance(thresholds, float):
+            self.thresholds = [thresholds] * (len(self.estimators) - 1)
+        else:
+            assert (
+                len(thresholds) >= len(self.estimators) - 1
+            ), "thresholds must be provided for at least all but the last estimator"
+
+            self.thresholds = list(thresholds)
+
+        if self.response_method == "decision_function":
+            if len(thresholds) == len(self.estimators) - 1:
+                self.thresholds.append(-np.inf)
+        else:
+            self.thresholds.append(0.0)
+
+    def set_params(self, **params):
+        """Sets meta-estimator parameters.
+
+        The method works on simple estimators as well as on nested objects
+        (such as :class:`~sklearn.pipeline.Pipeline`). The latter have
+        parameters of the form ``<component>__<parameter>`` so that it's
+        possible to update each component of a nested object.
+
+        The parameter ``thresholds`` will be augmented.
+
+        Parameters
+        ----------
+        **params : dict
+            Estimator parameters.
+
+        Returns
+        -------
+        self : estimator instance
+            Estimator instance.
+        """
+        super().set_params(**params)
+
+        if "thresholds" in params:
+            self._set_thresholds(params.get("thresholds"))
+
+        return self
+
     def set_estimators(self, index):
-        """Sets the estimators to use for prediction and scoring.
+        """Sets the estimators and thresholds to use for prediction and scoring.
+
+        If a single index passed, the corresponding threshold is set to 0.0 or -np.inf
+        depending on the ``response_method`` attribute.
 
         By default, uses all trained estimators (available by the ``estimators_``
-        attribute), but can be changed to a subset of the estimators.
+        ``thresholds`` attribute).
 
         Parameters
         ----------
@@ -286,18 +350,38 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         Raises
         ------
         TypeError:
-            If ``index`` is of unsupported type.
+            If ``index`` is of unsupported type or value.
         """
         check_is_fitted(self, attributes="is_fitted_")
 
         if isinstance(index, int):
             self._current_estimators = [self.estimators_[index]]
-        elif isinstance(index, Sequence):
-            self._current_estimators = [self.estimators_[i] for i in index]
-        elif isinstance(index, slice):
-            self._current_estimators = self.estimators_[index]
+            if self.response_method == "predict_proba":
+                self._current_thresholds = [0.0]
+            else:
+                self._current_thresholds = [-np.inf]
+
         elif index == "all":
             self._current_estimators = self.estimators_[:]
+            self._current_thresholds = self.thresholds[:]
+
+        elif isinstance(index, Sequence):
+            self._current_estimators = [self.estimators_[i] for i in index]
+            self._current_thresholds = [self.thresholds[i] for i in index[:-1]]
+            if self.response_method == "predict_proba":
+                self._current_thresholds.append(0.0)
+            else:
+                self._current_thresholds.append(-np.inf)
+
+        elif isinstance(index, slice):
+            self._current_estimators = self.estimators_[index]
+            self._current_thresholds = self.thresholds[index]
+            self._current_thresholds.pop()
+            if self.response_method == "predict_proba":
+                self._current_thresholds.append(0.0)
+            else:
+                self._current_thresholds.append(-np.inf)
+
         else:
             raise TypeError(
                 f"index must be int or slice or sequence of int, not {type(index)}"
@@ -305,11 +389,53 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
 
         return self
 
+    def reset_estimators(self):
+        """Reactivates all the base estimators.
 
-def _fit_one(estimator, X, y, sample_weight=None):
-    """Trains ``estimator`` on ``(X, y)``."""
-    estimator = clone(estimator)
-    if "sample_weight" in inspect.getfullargspec(estimator.fit).args:
-        return estimator.fit(X, y, sample_weight=sample_weight)
-    else:
-        return estimator.fit(X, y)
+        Same as ``set_estimators("all")``. Use if you previously set to skip some
+        estimators and thresholds, and want to activate all estimators again.
+
+        Returns
+        -------
+        self : object
+            Returns self.
+        """
+        return self.set_estimators("all")
+
+    def _predict_multi_class_scores(self, X):
+        """Estimates scores for predict_proba and multiclass decision_function."""
+        acceptance_mask = np.ones(len(X), dtype=bool)
+
+        y_score = np.zeros((len(X), len(self.classes_)), dtype=np.float64)
+
+        for estimator, threshold in zip(
+            self._current_estimators, self._current_thresholds
+        ):
+            y_score[acceptance_mask] = getattr(estimator, self.response_method)(
+                X[acceptance_mask, :]
+            )
+            acceptance_mask ^= y_score.max(axis=1) >= threshold
+
+            if acceptance_mask.sum() == 0:
+                break
+
+        return y_score
+
+    def _predict_binary_class_scores(self, X):
+        """Estimates scores for predict_proba and multiclass decision_function."""
+        acceptance_mask = np.ones(len(X), dtype=bool)
+
+        y_score = np.zeros(len(X), dtype=np.float64)
+
+        for estimator, threshold in zip(
+            self._current_estimators, self._current_thresholds
+        ):
+            y_score[acceptance_mask] = getattr(estimator, self.response_method)(
+                X[acceptance_mask, :]
+            )
+            acceptance_mask ^= y_score >= threshold
+
+            if acceptance_mask.sum() == 0:
+                break
+
+        return y_score

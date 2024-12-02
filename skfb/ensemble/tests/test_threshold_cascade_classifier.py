@@ -7,7 +7,7 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 
-from skfb.cascade import ThresholdCascadeClassifier
+from skfb.ensemble import ThresholdCascadeClassifier
 
 
 def test_threshold_cascade_classifier():
@@ -17,7 +17,7 @@ def test_threshold_cascade_classifier():
     X = np.array(
         [[0, 0], [4, 4], [1, 1], [3, 3], [2.5, 2], [2.0, 2.5], [2.0, 2.0], [2.5, 2.5]]
     )
-    y = np.array([0, 1, 0, 1, 0, 1, 1, 0])
+    y = np.array(["a", "c", "a", "c", "a", "c", "c", "a"])
 
     maxent = LogisticRegression(random_state=0)
     rf = RandomForestClassifier(random_state=0)
@@ -42,3 +42,5 @@ def test_threshold_cascade_classifier():
     rf_time = toc - tic
 
     assert rf_time > cascade_time > maxent_time
+
+    assert cascade.reset_estimators().thresholds == [0.8, 0.0]
