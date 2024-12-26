@@ -4,43 +4,91 @@ import time
 
 import numpy as np
 
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
+from sklearn.base import BaseEstimator, ClassifierMixin
 
 from skfb.ensemble import ThresholdCascadeClassifier
 
 
+class OverheadEstimator(BaseEstimator, ClassifierMixin):
+    """Accepts and returns the same probability scores."""
+
+    def __init__(self, overhead):
+        self.overhead = overhead
+
+    # pylint: disable=unused-argument
+    def fit(self, X, y):
+        return self
+
+    def predict(self, y):
+        time.sleep(self.overhead * len(y))
+        return y.argmax(axis=1)
+
+    def predict_proba(self, y):
+        time.sleep(self.overhead * len(y))
+        return y
+
+
 def test_threshold_cascade_classifier():
     """Tests ``TresholdCascadeClassifier``."""
-    n_iterations = 1_000
-
-    X = np.array(
-        [[0, 0], [4, 4], [1, 1], [3, 3], [2.5, 2], [2.0, 2.5], [2.0, 2.0], [2.5, 2.5]]
+    y_score = np.array(
+        [
+            [0.8, 0.2],
+            [0.4, 0.6],
+            [0.7, 0.3],
+            [0.49, 0.51],
+            [0.71, 0.29],
+            [0.39, 0.61],
+            [0.55, 0.45],
+            [0.35, 0.65],
+            [0.505, 0.495],
+        ],
     )
-    y = np.array(["a", "c", "a", "c", "a", "c", "c", "a"])
-
-    maxent = LogisticRegression(random_state=0)
-    rf = RandomForestClassifier(random_state=0)
-    cascade = ThresholdCascadeClassifier([maxent, rf], 0.8).fit(X, y)
-
-    X = np.concat([X] * n_iterations)
+    y = np.array(["a", "c", "a", "c", "a", "c", "c", "a", "c"])
+    n_iterations = 100
+    X = np.concat([y_score] * n_iterations)
     y = np.concat([y] * n_iterations)
 
+    weak = OverheadEstimator(overhead=1e-4)
+    medium = OverheadEstimator(overhead=5e-4)
+    large = OverheadEstimator(overhead=1e-3)
+    cascade = ThresholdCascadeClassifier(
+        [weak, medium, large],
+        [0.7, 0.6],
+        return_earray=True,
+    )
+    cascade.fit(X, y)
+
     tic = time.perf_counter()
-    assert cascade.score(X, y) == 1.0
+    cascade.predict(X)
     toc = time.perf_counter()
     cascade_time = toc - tic
 
     tic = time.perf_counter()
-    assert cascade.set_estimators(0).score(X, y) == 0.75
+    cascade.set_estimators(0).predict(X)
     toc = time.perf_counter()
-    maxent_time = toc - tic
+    weak_time = toc - tic
 
     tic = time.perf_counter()
-    assert cascade.set_estimators(1).score(X, y) == 1.0
+    cascade.set_estimators(2).predict(X)
     toc = time.perf_counter()
-    rf_time = toc - tic
+    large_time = toc - tic
 
-    assert rf_time > cascade_time > maxent_time
+    assert large_time > cascade_time > weak_time
 
-    assert cascade.reset_estimators().thresholds == [0.8, 0.0]
+    y_pred = cascade.reset_estimators().predict(y_score)
+    np.testing.assert_array_equal(
+        y_pred.ensemble_mask.toarray(),
+        np.array(
+            [
+                [True, False, False],
+                [False, True, False],
+                [True, False, False],
+                [False, False, True],
+                [True, False, False],
+                [False, True, False],
+                [False, False, True],
+                [False, True, False],
+                [False, False, True],
+            ],
+        ),
+    )

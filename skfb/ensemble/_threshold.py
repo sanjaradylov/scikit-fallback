@@ -25,6 +25,7 @@ from ..utils._legacy import (
     validate_params,
 )
 from ._common import fit_one
+from ..core.array import earray
 
 
 class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
@@ -78,6 +79,7 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         "estimators": ["array-like"],
         "thresholds": ["array-like", Interval(Real, None, None, closed="neither")],
         "response_method": [StrOptions({"decision_function", "predict_proba"})],
+        "return_earray": ["boolean"],
         "n_jobs": [Interval(Integral, -1, None, closed="left"), None],
         "verbose": ["verbose"],
     }
@@ -87,12 +89,14 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         estimators,
         thresholds,
         response_method="predict_proba",
+        return_earray=True,
         n_jobs=None,
         verbose=False,
     ):
         self.estimators = estimators
         self.response_method = response_method
         self._set_thresholds(thresholds)
+        self.return_earray = return_earray
         self.n_jobs = n_jobs
         self.verbose = verbose
 
@@ -167,11 +171,17 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         # Process decision scores for binary classification
         if is_binary and self.response_method == "decision_function":
             y_score = self._predict_binary_class_scores(X)
-            return np.take(self.classes_, y_score >= 0.0)
+            y_pred = np.take(self.classes_, y_score >= 0.0)
+            return (
+                earray(y_pred, y_score.ensemble_mask) if self.return_earray else y_pred
+            )
         # Process decision scores/probas for multiclass classification
         else:
             y_score = self._predict_multi_class_scores(X)
-            return np.take(self.classes_, y_score.argmax(axis=1))
+            y_pred = np.take(self.classes_, y_score.argmax(axis=1))
+            return (
+                earray(y_pred, y_score.ensemble_mask) if self.return_earray else y_pred
+            )
 
     @validate_params(
         {
@@ -404,38 +414,90 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
 
     def _predict_multi_class_scores(self, X):
         """Estimates scores for predict_proba and multiclass decision_function."""
-        acceptance_mask = np.ones(len(X), dtype=bool)
+        # region Prevent masking overhead if only one base estimator is activated.
+        if len(self._current_estimators) == 1:
+            y_score = getattr(self._current_estimators[0], self.response_method)(X)
+            return earray(y_score) if self.return_earray else y_score
+        # endregion
 
-        y_score = np.zeros((len(X), len(self.classes_)), dtype=np.float64)
-
-        for estimator, threshold in zip(
-            self._current_estimators, self._current_thresholds
-        ):
-            y_score[acceptance_mask] = getattr(estimator, self.response_method)(
-                X[acceptance_mask, :]
+        # region Store ensemble mask
+        if self.return_earray:
+            ensemble_mask = np.zeros(
+                shape=(len(X), len(self.estimators_)),
+                dtype=np.bool_,
             )
-            acceptance_mask ^= y_score.max(axis=1) >= threshold
+        # endregion
 
-            if acceptance_mask.sum() == 0:
+        # region Cascading w/ more than one base estimator
+        # Composite proba/decision scores
+        y_score = np.zeros((len(X), len(self.classes_)), dtype=np.float64)
+        # Current mask: True means that sample should be deferred
+        deferred = np.ones(len(X), dtype=np.bool_)
+        if self.return_earray:
+            previous_mask = np.ones_like(deferred)
+
+        for i, (estimator, threshold) in enumerate(
+            zip(self._current_estimators, self._current_thresholds)
+        ):
+            y_score[deferred] = getattr(estimator, self.response_method)(X[deferred, :])
+            deferred[deferred] = y_score[deferred].max(axis=1) < threshold
+
+            if self.return_earray:
+                mask = ~deferred
+                mask[~previous_mask] = False
+                ensemble_mask[:, i] = mask
+                previous_mask = deferred.copy()
+
+            if deferred.sum() == 0:
                 break
 
-        return y_score
+        if self.return_earray:
+            return earray(y_score, ensemble_mask)
+        else:
+            return y_score
+        # endregion
 
     def _predict_binary_class_scores(self, X):
         """Estimates scores for predict_proba and multiclass decision_function."""
-        acceptance_mask = np.ones(len(X), dtype=bool)
+        # region Prevent masking overhead if only one base estimator is activated.
+        if len(self._current_estimators) == 1:
+            y_score = getattr(self._current_estimators[0], self.response_method)(X)
+            return earray(y_score) if self.return_earray else y_score
+        # endregion
 
-        y_score = np.zeros(len(X), dtype=np.float64)
-
-        for estimator, threshold in zip(
-            self._current_estimators, self._current_thresholds
-        ):
-            y_score[acceptance_mask] = getattr(estimator, self.response_method)(
-                X[acceptance_mask, :]
+        # region Store ensemble mask
+        if self.return_earray:
+            ensemble_mask = np.zeros(
+                shape=(len(X), len(self.estimators_)),
+                dtype=np.bool_,
             )
-            acceptance_mask ^= y_score >= threshold
+        # endregion
 
-            if acceptance_mask.sum() == 0:
+        # region Cascading w/ more than one base estimator
+        # Composite proba/decision scores
+        y_score = np.zeros(len(X), dtype=np.float64)
+        # Current mask: True means that sample should be deferred
+        deferred = np.ones(len(X), dtype=np.bool_)
+        if self.return_earray:
+            previous_mask = np.ones_like(deferred)
+
+        for i, (estimator, threshold) in enumerate(
+            zip(self._current_estimators, self._current_thresholds)
+        ):
+            y_score[deferred] = getattr(estimator, self.response_method)(X[deferred, :])
+            deferred[deferred] = y_score[deferred] < threshold
+
+            if self.return_earray:
+                mask = ~deferred
+                mask[~previous_mask] = False
+                ensemble_mask[:, i] = mask
+                previous_mask = deferred.copy()
+
+            if deferred.sum() == 0:
                 break
 
-        return y_score
+        if self.return_earray:
+            return earray(y_score, ensemble_mask)
+        else:
+            return y_score
+        # endregion
