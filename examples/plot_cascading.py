@@ -92,7 +92,7 @@ def report(estimator, X, y, title, target_names=None, is_cascade=False):
     print(classification_report(y, y_pred_, target_names=target_names))
 
     if is_cascade:
-        print(f"Deferral rate: {y_pred_.ensemble_mask.mean(axis=0)[0, 1]:.2f}")
+        print(f"Deferral rate: {y_pred_.deferral_rate[0]:.2f}")
 
     print("=" * 20)
 
@@ -123,13 +123,13 @@ for threshold in thresholds:
 
     scores.append(accuracy_score(y_test, y_pred))
 
-    deferral_cost = calculate_cost(y_pred.ensemble_mask.mean(axis=0)[0, 1])
+    deferral_cost = calculate_cost(y_pred.deferral_rate[1])
     deferral_costs.append(deferral_cost)
 
 plt.figure(figsize=(10, 6))
 plt.plot(
-    deferral_costs[5:-5],
-    scores[5:-5],
+    deferral_costs[4:-5],
+    scores[4:-5],
     marker="o",
     linestyle="--",
     linewidth=1,

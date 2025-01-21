@@ -156,6 +156,11 @@ class ENDArray(np.ndarray):
         """Returns the sparse ensemble mask."""
         return self._ensemble_mask
 
+    @property
+    def deferral_rate(self):
+        """Returns an ndarray of ratios of deferred samples per estimator."""
+        return self.ensemble_mask.toarray().mean(axis=0)
+
 
 def earray(predictions, ensemble_mask=None):
     """Creates an ndarray of predictions that also stores an ensemble mask."""

@@ -2,6 +2,8 @@
 
 from typing import Sequence
 
+import warnings
+
 import numpy as np
 
 from sklearn.base import BaseEstimator, ClassifierMixin, check_is_fitted
@@ -29,13 +31,18 @@ from ._common import fit_one
 from ..core.array import earray
 
 
+class CascadeNotFittedWarning(UserWarning):
+    """Raised if base estimators in cascade are not fitted or fitted incorrectly."""
+
+
 class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
     """Cascade of classifiers w/ deferrals based on predefined thresholds.
 
-    Trains all estimators. During inference, runs the first estimator and if
-    a predicted score is lower than ``thresholds[0]``, tries the second, and so on.
-    The last estimator always makes predictions on the samples deferred by the previous
-    estimators.
+    During inference, runs the first estimator and if a predicted score is lower than
+    ``thresholds[0]``, tries the second, and so on. The last estimator always makes
+    predictions on the samples deferred by the previous estimators.
+    If every estimator is fitted, it is not necessary to run ``fit`` to make
+    predictions.
 
     Parameters
     ----------
@@ -43,13 +50,16 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         Base estimators. Preferrably, from weakest (e.g., rule-based or linear) to
         strongest (e.g., gradient boosting).
     thresholds : float or array-like of float, length n_estimators - 1
-        Deferral thresholds for each base estimators except the first.
+        Deferral thresholds for each base estimator except the last.
     response_method : {"predict_proba", "decision_function"}, default="predict_proba"
         Methods by ``estimators`` for which we want to find return deferral thresholds.
         For ``"decision_function"``, ``thresholds`` can be negative.
     return_earray : bool, default=False
         Whether to return :class:`~skfb.core.ENDArray` of predicted classes / scores
         or plain numpy ndarray.
+    prefit : bool, default=False
+        Whether estimators are fitted. If True, checks their ``classes_`` attributes
+        for intercompatibility.
     n_jobs : int, default=None
         Number of parallel jobs used during training.
     verbose : int, default=False
@@ -84,6 +94,7 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         "thresholds": ["array-like", Interval(Real, None, None, closed="neither")],
         "response_method": [StrOptions({"decision_function", "predict_proba"})],
         "return_earray": ["boolean"],
+        "prefit": ["boolean"],
         "n_jobs": [Interval(Integral, -1, None, closed="left"), None],
         "verbose": ["verbose"],
     }
@@ -94,6 +105,7 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         thresholds,
         response_method="predict_proba",
         return_earray=True,
+        prefit=False,
         n_jobs=None,
         verbose=False,
     ):
@@ -101,16 +113,44 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         self.response_method = response_method
         self.set_thresholds(thresholds)
         self.return_earray = return_earray
+        self.prefit = prefit
         self.n_jobs = n_jobs
         self.verbose = verbose
 
-        for estimator in self.estimators:
-            try:
-                check_is_fitted(estimator, "classes_")
-            except NotFittedError:
-                break
-        else:
-            self.estimators_ = estimators
+        # region Check if base estimators are fitted correctly
+        if self.prefit:
+            classes = None
+            for i, estimator in enumerate(self.estimators):
+                try:
+                    check_is_fitted(estimator, "classes_")
+
+                    if not (
+                        classes is None or np.array_equal(classes, estimator.classes_)
+                    ):
+                        warnings.warn(
+                            f"Estimators {i} and {i-1} predict different classes; "
+                            f"please, run cascade's `fit` method to train all "
+                            f"estimators.",
+                            category=CascadeNotFittedWarning,
+                        )
+                        break
+
+                    classes = estimator.classes_
+
+                except NotFittedError:
+                    warnings.warn(
+                        f"Estimator {i} is not fitted; "
+                        f"please, run cascade's `fit` method to train all estimators.",
+                        category=CascadeNotFittedWarning,
+                    )
+                    break
+
+            else:
+                self.estimators_ = estimators
+                self._current_estimators = self.estimators_[:]
+                self._current_thresholds = self.thresholds[:]
+                self.is_fitted_ = True
+        # endregion
 
     @_fit_context(prefer_skip_nested_validation=False)
     @validate_params(
@@ -253,7 +293,6 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         y_score : ndarray of shape (n_samples, n_classes)
             Log-probabilities predicted by the base estimators.
         """
-        X = check_array(X, accept_sparse=True, ensure_2d=False, dtype=None)
         return np.log(self.predict_proba(X))
 
     def decision_function(self, X):
