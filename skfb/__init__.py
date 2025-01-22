@@ -21,4 +21,4 @@ __all__ = (
     "metrics",
 )
 
-__version__ = "0.1.1.post0"
+__version__ = "0.2.0.rc0"

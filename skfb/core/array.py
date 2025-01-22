@@ -1,13 +1,14 @@
 """Extensions to numpy ndarrays supporting fallback masks."""
 
 __all__ = (
+    "ENDArray",
     "fbarray",
     "FBNDArray",
 )
 
 import numpy as np
 
-from scipy.sparse import coo_array
+from scipy.sparse import coo_array, csr_matrix
 
 from ..utils._legacy import validate_params
 
@@ -114,3 +115,53 @@ class FBNDArray(np.ndarray):
 def fbarray(predictions, fallback_mask=None):
     """Creates an ndarray of predictions that also stores fallback information."""
     return FBNDArray(predictions, fallback_mask=fallback_mask)
+
+
+class ENDArray(np.ndarray):
+    """Numpy ndarray storing masks of predicted samples per estimator."""
+
+    def __new__(cls, predictions, ensemble_mask=None):
+        obj = np.asarray(predictions).view(cls)
+        obj._ensemble_mask = cls._validate_ensemble_mask(ensemble_mask, len(obj))
+        return obj
+
+    def __array_finalize__(self, obj):
+        if obj is not None:
+            empty = np.array([[]], dtype=np.bool_)
+            self._ensemble_mask = getattr(obj, "_ensemble_mask", empty)
+
+    @classmethod
+    @validate_params(
+        {
+            "ensemble_mask": ["array-like", None],
+        },
+        prefer_skip_nested_validation=True,
+    )
+    def _validate_ensemble_mask(cls, ensemble_mask, num_predictions):
+        """Returns CSR sparse ``ensemble_mask`` if it's a valid prediction mask."""
+        if isinstance(ensemble_mask, csr_matrix):
+            return ensemble_mask
+        elif ensemble_mask is None or ensemble_mask.shape[0] == 0:
+            return csr_matrix(np.array([[]], dtype=np.bool_))
+        elif ensemble_mask.shape[0] != num_predictions:
+            raise ValueError(
+                f"Mask size = {len(ensemble_mask)} is greater than number of "
+                f"elements of array = {num_predictions}"
+            )
+        else:
+            return csr_matrix(np.asarray(ensemble_mask, dtype=np.bool_))
+
+    @property
+    def ensemble_mask(self):
+        """Returns the sparse ensemble mask."""
+        return self._ensemble_mask
+
+    @property
+    def deferral_rate(self):
+        """Returns an ndarray of ratios of deferred samples per estimator."""
+        return self.ensemble_mask.toarray().mean(axis=0)
+
+
+def earray(predictions, ensemble_mask=None):
+    """Creates an ndarray of predictions that also stores an ensemble mask."""
+    return ENDArray(predictions, ensemble_mask=ensemble_mask)
