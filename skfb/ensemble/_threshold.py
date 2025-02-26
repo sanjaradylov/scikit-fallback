@@ -8,7 +8,11 @@ import numpy as np
 
 from sklearn.base import BaseEstimator, ClassifierMixin, check_is_fitted
 from sklearn.metrics import accuracy_score
-from sklearn.utils.validation import check_array, check_X_y, NotFittedError
+from sklearn.utils.validation import (
+    check_array,
+    check_X_y,
+    NotFittedError,
+)
 from sklearn.utils.multiclass import unique_labels
 
 try:
@@ -51,6 +55,8 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         strongest (e.g., gradient boosting).
     thresholds : float or array-like of float, length n_estimators - 1
         Deferral thresholds for each base estimator except the last.
+        If only one number is specified, every estimator (except the last) will have
+        the same threshold (i.e., the threshold will be *global*).
     response_method : {"predict_proba", "decision_function"}, default="predict_proba"
         Methods by ``estimators`` for which we want to find return deferral thresholds.
         For ``"decision_function"``, ``thresholds`` can be negative.
@@ -111,7 +117,8 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
     ):
         self.estimators = estimators
         self.response_method = response_method
-        self.set_thresholds(thresholds)
+        self.thresholds = thresholds
+        self._set_thresholds(thresholds)
         self.return_earray = return_earray
         self.prefit = prefit
         self.n_jobs = n_jobs
@@ -147,8 +154,9 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
 
             else:
                 self.estimators_ = estimators
+                self.classes_ = classes
                 self._current_estimators = self.estimators_[:]
-                self._current_thresholds = self.thresholds[:]
+                self._current_thresholds = self.thresholds_[:]
                 self.is_fitted_ = True
         # endregion
 
@@ -178,7 +186,15 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         self : object
             Returns self.
         """
-        X, y = check_X_y(X, y, accept_sparse=True, ensure_2d=False, dtype=None)
+        X, y = check_X_y(
+            X,
+            y,
+            accept_sparse=True,
+            allow_nd=True,
+            dtype=None,
+            ensure_all_finite=False,
+            ensure_2d=False,
+        )
 
         self.classes_ = unique_labels(y)
 
@@ -188,7 +204,7 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
                 for estimator in self.estimators
             )
         self._current_estimators = self.estimators_[:]
-        self._current_thresholds = self.thresholds[:]
+        self._current_thresholds = self.thresholds_[:]
 
         self.is_fitted_ = True
 
@@ -220,7 +236,14 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
             Classes predicted by the base estimators.
         """
         check_is_fitted(self, attributes="is_fitted_")
-        X = check_array(X, accept_sparse=True, ensure_2d=False, dtype=None)
+        X = check_array(
+            X,
+            accept_sparse=True,
+            allow_nd=True,
+            dtype=None,
+            ensure_all_finite=False,
+            ensure_2d=False,
+        )
 
         is_binary = len(self.classes_) == 2
 
@@ -265,7 +288,14 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
             Probabilities predicted by the base estimators.
         """
         check_is_fitted(self, attributes="is_fitted_")
-        X = check_array(X, accept_sparse=True, ensure_2d=False, dtype=None)
+        X = check_array(
+            X,
+            accept_sparse=True,
+            allow_nd=True,
+            dtype=None,
+            ensure_all_finite=False,
+            ensure_2d=False,
+        )
         return self._predict_multi_class_scores(X)
 
     @validate_params(
@@ -315,7 +345,14 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
             Decision scores predicted by the base estimators.
         """
         check_is_fitted(self, attributes="is_fitted_")
-        X = check_array(X, accept_sparse=True, ensure_2d=False, dtype=None)
+        X = check_array(
+            X,
+            accept_sparse=True,
+            allow_nd=True,
+            dtype=None,
+            ensure_all_finite=False,
+            ensure_2d=False,
+        )
 
         is_binary = len(self.classes_) == 2
         if is_binary:
@@ -353,24 +390,44 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
 
         return accuracy_score(y, self.predict(X), sample_weight=sample_weight)
 
-    def set_thresholds(self, thresholds):
+    def set_params(self, **params):
+        """Sets the parameters of the cascade.
+
+        If thresholds are provided, the transformations are done accordingly, so there
+        is no need to refit the cascade.
+
+        Parameters
+        ----------
+        **params : dict
+            Cascade parameters.
+
+        Returns
+        -------
+        self : object
+            Returns self.
+        """
+        if "thresholds" in params:
+            self._set_thresholds(params["thresholds"])
+        return super().set_params(**params)
+
+    def _set_thresholds(self, thresholds):
         """Transforms ``thresholds`` into correct sequence of thresholds."""
         if isinstance(thresholds, float):
-            self.thresholds = [thresholds] * (len(self.estimators) - 1)
+            self.thresholds_ = [thresholds] * (len(self.estimators) - 1)
         else:
             assert (
                 len(thresholds) >= len(self.estimators) - 1
             ), "thresholds must be provided for at least all but the last estimator"
 
-            self.thresholds = list(thresholds)
+            self.thresholds_ = list(thresholds)
 
         if self.response_method == "decision_function":
             if len(thresholds) == len(self.estimators) - 1:
-                self.thresholds.append(-np.inf)
+                self.thresholds_.append(-np.inf)
         else:
-            self.thresholds.append(0.0)
+            self.thresholds_.append(0.0)
 
-        self._current_thresholds = self.thresholds[:]
+        self._current_thresholds = self.thresholds_[:]
 
         return self
 
@@ -408,11 +465,11 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
 
         elif index == "all":
             self._current_estimators = self.estimators_[:]
-            self._current_thresholds = self.thresholds[:]
+            self._current_thresholds = self.thresholds_[:]
 
         elif isinstance(index, Sequence):
             self._current_estimators = [self.estimators_[i] for i in index]
-            self._current_thresholds = [self.thresholds[i] for i in index[:-1]]
+            self._current_thresholds = [self.thresholds_[i] for i in index[:-1]]
             if self.response_method == "predict_proba":
                 self._current_thresholds.append(0.0)
             else:
@@ -420,7 +477,7 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
 
         elif isinstance(index, slice):
             self._current_estimators = self.estimators_[index]
-            self._current_thresholds = self.thresholds[index]
+            self._current_thresholds = self.thresholds_[index]
             self._current_thresholds.pop()
             if self.response_method == "predict_proba":
                 self._current_thresholds.append(0.0)
@@ -458,16 +515,16 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         # region Store ensemble mask
         if self.return_earray:
             ensemble_mask = np.zeros(
-                shape=(len(X), len(self.estimators_)),
+                shape=(X.shape[0], len(self.estimators_)),
                 dtype=np.bool_,
             )
         # endregion
 
         # region Cascading w/ more than one base estimator
         # Composite proba/decision scores
-        y_score = np.zeros((len(X), len(self.classes_)), dtype=np.float64)
+        y_score = np.zeros((X.shape[0], len(self.classes_)), dtype=np.float64)
         # Current mask: True means that sample should be deferred
-        deferred = np.ones(len(X), dtype=np.bool_)
+        deferred = np.ones(X.shape[0], dtype=np.bool_)
         if self.return_earray:
             previous_mask = np.ones_like(deferred)
 
@@ -510,16 +567,16 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         # region Store ensemble mask
         if self.return_earray:
             ensemble_mask = np.zeros(
-                shape=(len(X), len(self.estimators_)),
+                shape=(X.shape[0], len(self.estimators_)),
                 dtype=np.bool_,
             )
         # endregion
 
         # region Cascading w/ more than one base estimator
         # Composite proba/decision scores
-        y_score = np.zeros(len(X), dtype=np.float64)
+        y_score = np.zeros(X.shape[0], dtype=np.float64)
         # Current mask: True means that sample should be deferred
-        deferred = np.ones(len(X), dtype=np.bool_)
+        deferred = np.ones(X.shape[0], dtype=np.bool_)
         if self.return_earray:
             previous_mask = np.ones_like(deferred)
 

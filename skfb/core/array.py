@@ -157,8 +157,8 @@ class ENDArray(np.ndarray):
         return self._ensemble_mask
 
     @property
-    def deferral_rate(self):
-        """Returns an ndarray of ratios of deferred samples per estimator."""
+    def acceptance_rates(self):
+        """Returns an ndarray of ratios of accepted samples per estimator."""
         return self.ensemble_mask.toarray().mean(axis=0)
 
 

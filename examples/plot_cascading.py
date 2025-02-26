@@ -92,7 +92,7 @@ def report(estimator, X, y, title, target_names=None, is_cascade=False):
     print(classification_report(y, y_pred_, target_names=target_names))
 
     if is_cascade:
-        print(f"Deferral rate: {y_pred_.deferral_rate[0]:.2f}")
+        print(f"Acceptance rates: {y_pred_.acceptance_rates[0]:.2f}")
 
     print("=" * 20)
 
@@ -108,9 +108,11 @@ report(cascade.set_estimators(1), X_test, y_test, "Strong Model", target_names=y
 WEAK_MODEL_COST, STRONG_MODEL_COST = 1.0, 6.0
 
 
-def calculate_cost(deferral_rate):
+def calculate_cost(acceptance_rates):
     """Calculates resources spent to infer w/ cascade."""
-    return STRONG_MODEL_COST * deferral_rate + WEAK_MODEL_COST * (1 - deferral_rate)
+    return STRONG_MODEL_COST * acceptance_rates + WEAK_MODEL_COST * (
+        1 - acceptance_rates
+    )
 
 
 cascade.reset_estimators()
@@ -119,17 +121,17 @@ thresholds = np.linspace(0.05, 0.95, 30)
 scores = []
 deferral_costs = []
 for threshold in thresholds:
-    y_pred = cascade.set_thresholds(threshold).predict(X_test)
+    y_pred = cascade.set_params(thresholds=threshold).predict(X_test)
 
     scores.append(accuracy_score(y_test, y_pred))
 
-    deferral_cost = calculate_cost(y_pred.deferral_rate[1])
+    deferral_cost = calculate_cost(y_pred.acceptance_rates[1])
     deferral_costs.append(deferral_cost)
 
 plt.figure(figsize=(10, 6))
 plt.plot(
-    deferral_costs[4:-5],
-    scores[4:-5],
+    deferral_costs[5:-5],
+    scores[5:-5],
     marker="o",
     linestyle="--",
     linewidth=1,

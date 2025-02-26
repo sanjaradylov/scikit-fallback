@@ -41,9 +41,12 @@ def test_threshold_cascade_classifier():
             [0.55, 0.45],
             [0.35, 0.65],
             [0.505, 0.495],
+            [0.39, 0.61],
+            [0.5, 0.5],
+            [0.51, 0.49],
         ],
     )
-    y = np.array(["a", "c", "a", "c", "a", "c", "c", "a", "c"])
+    y = np.array(list("acacaccacaac"))
     n_iterations = 100
     X = np.concat([y_score] * n_iterations)
     y = np.concat([y] * n_iterations)
@@ -89,6 +92,14 @@ def test_threshold_cascade_classifier():
                 [False, False, True],
                 [False, True, False],
                 [False, False, True],
+                [False, True, False],
+                [False, False, True],
+                [False, False, True],
             ],
         ),
+    )
+
+    np.testing.assert_array_equal(
+        y_pred.acceptance_rates,
+        np.array([3 / 12, 4 / 12, 5 / 12]),
     )
