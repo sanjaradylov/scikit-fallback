@@ -192,7 +192,6 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
             accept_sparse=True,
             allow_nd=True,
             dtype=None,
-            ensure_all_finite=False,
             ensure_2d=False,
         )
 
@@ -241,7 +240,6 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
             accept_sparse=True,
             allow_nd=True,
             dtype=None,
-            ensure_all_finite=False,
             ensure_2d=False,
         )
 
@@ -293,7 +291,6 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
             accept_sparse=True,
             allow_nd=True,
             dtype=None,
-            ensure_all_finite=False,
             ensure_2d=False,
         )
         return self._predict_multi_class_scores(X)
@@ -350,7 +347,6 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
             accept_sparse=True,
             allow_nd=True,
             dtype=None,
-            ensure_all_finite=False,
             ensure_2d=False,
         )
 

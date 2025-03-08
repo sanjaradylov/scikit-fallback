@@ -4,8 +4,10 @@ __all__ = (
     "multi_threshold_predict_or_fallback",
     "predict_or_fallback",
     "AnomalyFallbackClassifier",
+    "FallbackRuleClassifier",
     "MultiThresholdFallbackClassifier",
     "RateFallbackClassifierCV",
+    "RuleClassifier",
     "ThresholdFallbackClassifier",
     "ThresholdFallbackClassifierCV",
 )
@@ -16,6 +18,8 @@ from ._multi_threshold import (
     multi_threshold_predict_or_fallback,
     MultiThresholdFallbackClassifier,
 )
+
+from ._rule import FallbackRuleClassifier, RuleClassifier
 
 from ._threshold import (
     predict_or_fallback,
