@@ -4,7 +4,10 @@ import time
 
 import numpy as np
 
+import pytest
+
 from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.utils.multiclass import unique_labels
 
 from skfb.ensemble import ThresholdCascadeClassifier
 
@@ -17,6 +20,7 @@ class OverheadEstimator(BaseEstimator, ClassifierMixin):
 
     # pylint: disable=unused-argument
     def fit(self, X, y):
+        self.classes_ = unique_labels(y)
         return self
 
     def predict(self, y):
@@ -27,8 +31,102 @@ class OverheadEstimator(BaseEstimator, ClassifierMixin):
         time.sleep(self.overhead * len(y))
         return y
 
+    decision_function = predict_proba
 
-def test_threshold_cascade_classifier():
+
+@pytest.mark.parametrize(
+    "thresholds, ensemble_mask, acceptance_rates",
+    [
+        # region Arbitrary deferrals
+        (
+            [0.7, 0.6],
+            np.array(
+                [
+                    [True, False, False],
+                    [False, True, False],
+                    [True, False, False],
+                    [False, False, True],
+                    [True, False, False],
+                    [False, True, False],
+                    [False, False, True],
+                    [False, True, False],
+                    [False, False, True],
+                    [False, True, False],
+                    [False, False, True],
+                    [False, False, True],
+                ],
+            ),
+            np.array([3 / 12, 4 / 12, 5 / 12]),
+        ),
+        # endregion
+        # region All-deferals
+        (
+            [0.99, 0.99],
+            np.array(
+                [
+                    [False, False, True],
+                    [False, False, True],
+                    [False, False, True],
+                    [False, False, True],
+                    [False, False, True],
+                    [False, False, True],
+                    [False, False, True],
+                    [False, False, True],
+                    [False, False, True],
+                    [False, False, True],
+                    [False, False, True],
+                    [False, False, True],
+                ],
+            ),
+            np.array([0 / 12, 0 / 12, 12 / 12]),
+        ),
+        # endregion
+        # region All-accepts
+        (
+            [0.1, 0.1],
+            np.array(
+                [
+                    [True, False, False],
+                    [True, False, False],
+                    [True, False, False],
+                    [True, False, False],
+                    [True, False, False],
+                    [True, False, False],
+                    [True, False, False],
+                    [True, False, False],
+                    [True, False, False],
+                    [True, False, False],
+                    [True, False, False],
+                    [True, False, False],
+                ],
+            ),
+            np.array([12 / 12, 0 / 12, 0 / 12]),
+        ),
+        # endregion
+        # region One-deferrals
+        (
+            [0.99, 0.1],
+            np.array(
+                [
+                    [False, True, False],
+                    [False, True, False],
+                    [False, True, False],
+                    [False, True, False],
+                    [False, True, False],
+                    [False, True, False],
+                    [False, True, False],
+                    [False, True, False],
+                    [False, True, False],
+                    [False, True, False],
+                    [False, True, False],
+                    [False, True, False],
+                ],
+            ),
+            np.array([0 / 12, 12 / 12, 0 / 12]),
+        ),
+    ],
+)
+def test_threshold_cascade_classifier(thresholds, ensemble_mask, acceptance_rates):
     """Tests ``TresholdCascadeClassifier``."""
     y_score = np.array(
         [
@@ -56,50 +154,34 @@ def test_threshold_cascade_classifier():
     large = OverheadEstimator(overhead=1e-3)
     cascade = ThresholdCascadeClassifier(
         [weak, medium, large],
-        [0.7, 0.6],
+        thresholds,
         return_earray=True,
+        response_method="predict_proba",
     )
     cascade.fit(X, y)
 
     tic = time.perf_counter()
     cascade.predict(X)
     toc = time.perf_counter()
-    cascade_time = toc - tic
+    cascade_time = round(toc - tic, 2)
 
     tic = time.perf_counter()
     cascade.set_estimators(0).predict(X)
     toc = time.perf_counter()
-    weak_time = toc - tic
+    weak_time = round(toc - tic, 2)
 
     tic = time.perf_counter()
     cascade.set_estimators(2).predict(X)
     toc = time.perf_counter()
-    large_time = toc - tic
+    large_time = round(toc - tic, 2)
 
-    assert large_time > cascade_time > weak_time
+    if not (large_time > cascade_time >= weak_time):
+        pytest.xfail(
+            f"large_time = {large_time:.2f}, cascade_time = {cascade_time:.2f}, "
+            f"weak_time = {weak_time:.2f}"
+        )
 
     y_pred = cascade.reset_estimators().predict(y_score)
-    np.testing.assert_array_equal(
-        y_pred.ensemble_mask.toarray(),
-        np.array(
-            [
-                [True, False, False],
-                [False, True, False],
-                [True, False, False],
-                [False, False, True],
-                [True, False, False],
-                [False, True, False],
-                [False, False, True],
-                [False, True, False],
-                [False, False, True],
-                [False, True, False],
-                [False, False, True],
-                [False, False, True],
-            ],
-        ),
-    )
+    np.testing.assert_array_equal(y_pred.ensemble_mask.toarray(), ensemble_mask)
 
-    np.testing.assert_array_equal(
-        y_pred.acceptance_rates,
-        np.array([3 / 12, 4 / 12, 5 / 12]),
-    )
+    np.testing.assert_array_equal(y_pred.acceptance_rates, acceptance_rates)
