@@ -541,8 +541,10 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
             # region Update indices of deferred samples
             confident_idx = remaining_idx[confident_mask]
             y_score[confident_idx] = y_score_remaining[confident_mask]
-            ensemble_mask[confident_idx, i] = True
             remaining_idx = remaining_idx[~confident_mask]
+
+            if self.return_earray:
+                ensemble_mask[confident_idx, i] = True
             # endregion
         # endregion
 

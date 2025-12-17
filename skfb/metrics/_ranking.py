@@ -64,7 +64,7 @@ def fallback_quality_curve(
     score_func : callable, default=sklearn.metrics.accuracy_score
         Scoring function (such as accuracy score) to calculate on accepted
         examples for every fallback threshold.
-    predict_method : {"predict", "predict_proba", "predict_log_proba"},
+    predict_method : {"predict", "predict_proba", "predict_log_proba"}, \
             default="predict"
         Whether ``score_func`` accepts classes, probabilities, or log-probabilities.
     min_fallback_rate : float, default=0.0

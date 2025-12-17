@@ -1,5 +1,5 @@
 """The :mod:`skfb.cascade` module implements cascade ensembles."""
 
-__all__ = ("ThresholdCascadeClassifier",)
+__all__ = ("CascadeNotFittedWarning", "ThresholdCascadeClassifier")
 
-from ._threshold import ThresholdCascadeClassifier
+from ._threshold import CascadeNotFittedWarning, ThresholdCascadeClassifier
