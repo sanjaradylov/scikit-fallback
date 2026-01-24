@@ -6,8 +6,9 @@ import warnings
 
 import numpy as np
 
-from sklearn.base import BaseEstimator, ClassifierMixin, check_is_fitted
-from sklearn.metrics import accuracy_score
+from sklearn.base import BaseEstimator, ClassifierMixin, check_is_fitted, clone
+from sklearn.metrics import accuracy_score, get_scorer, get_scorer_names
+from sklearn.model_selection import check_cv, ParameterGrid
 from sklearn.utils.validation import (
     check_array,
     check_X_y,
@@ -552,3 +553,375 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
             return earray(y_score, ensemble_mask)
         else:
             return y_score
+
+
+_N_CV_THRESHOLDS = 10
+_MAX_DEFAULT_CV_THRESHOLD = 0.95
+
+
+def _cost_aware_score(y_true, y_pred, scorer, costs, cost_weight=0.0):
+    """Compute cost-aware score balancing accuracy and computational costs.
+
+    Follows the Cascadia approach: combines accuracy score with accumulated
+    computational costs of using different estimators in the cascade.
+
+    Parameters
+    ----------
+    y_true : array-like
+        True labels.
+    y_pred : FBNDArray or ndarray
+        Predictions with optional ensemble mask.
+    scorer : callable or sklearn scorer
+        Scorer object. Can be sklearn scorer (which has _score_func method)
+        or a plain callable that takes (y_true, y_pred).
+    costs : array-like
+        Cost per estimator (includes all estimators).
+    cost_weight : float, default=0.0
+        Weight for the cost term. Higher values penalize computational cost more.
+
+    Returns
+    -------
+    score : float
+        Cost-aware score.
+    """
+    # Get base accuracy score using the scorer
+    # If it's a sklearn scorer, use _score_func; otherwise call directly.
+    if hasattr(scorer, "_score_func"):
+        accuracy = scorer._score_func(y_true, y_pred)
+    else:
+        accuracy = scorer(y_true, y_pred)
+
+    # If cost_weight is 0 or y_pred is not an array with ensemble_mask,
+    # return accuracy only.
+    if cost_weight == 0.0 or not hasattr(y_pred, "ensemble_mask"):
+        return accuracy
+
+    # Calculate total cost from ensemble mask
+    # ensemble_mask shape: (n_samples, n_estimators).
+    n_samples = y_pred.ensemble_mask.shape[0]
+    ensemble_costs = y_pred.ensemble_mask @ np.array(costs)  # Cost per sample
+    total_cost = ensemble_costs.sum() / n_samples  # Average cost
+
+    # Return combined score: accuracy - cost_weight * avg_cost
+    return accuracy - cost_weight * total_cost
+
+
+def _scoring_path(
+    estimators,
+    costs,
+    thresholds,
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    scorer,
+    response_method,
+    cost_weight=0.0,
+):
+    """Trains cascade and scores with cost-aware metric.
+
+    Parameters
+    ----------
+    estimators : list
+        Base estimators to train.
+    costs : array-like
+        Cost per estimator.
+    thresholds : array-like or float
+        Deferral thresholds for cascade.
+    X_train, X_test : array-like
+        Training and test features.
+    y_train, y_test : array-like
+        Training and test labels.
+    scorer : callable
+        Scorer function.
+    response_method : str
+        Method for confidence scores.
+    cost_weight : float, default=0.0
+        Weight for computational cost in the objective.
+
+    Returns
+    -------
+    score : float
+        Cost-aware score on test set.
+    """
+    cascade = ThresholdCascadeClassifier(
+        clone(estimators),
+        thresholds=thresholds,
+        response_method=response_method,
+        return_earray=True,
+        prefit=False,
+        n_jobs=None,
+        verbose=False,
+    )
+    y_pred = cascade.fit(X_train, y_train).predict(X_test)
+    score = _cost_aware_score(y_test, y_pred, scorer, costs, cost_weight)
+    return score
+
+
+class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
+    """Cascade of classifiers w/ deferrals based on tuned thresholds.
+
+    Optimizes deferral thresholds via cross-validation and grid search to balance
+    classification accuracy with computational costs.
+    During inference, runs the first estimator and if a predicted score is lower than
+    ``thresholds[0]``, tries the second, and so on. The last estimator always makes
+    predictions on the samples deferred by the previous estimators.
+
+    Parameters
+    ----------
+    estimators : array-like of object, length n_estimators
+        Base estimators. Preferrably, from weakest (e.g., rule-based or linear) to
+        strongest (e.g., gradient boosting).
+    costs : array-like of shape (n_estimators,)
+        Computational cost per estimator. Used to optimize thresholds balancing
+        accuracy and computational efficiency.
+    cv_thresholds : array-like of shape (n_thresholds,) or int, default=None
+        Array of candidate deferral thresholds to evaluate via grid search.
+        If None, defaults to 10 thresholds linearly spaced from 1/n_classes to 0.95.
+        If int, generates that many thresholds in the same range.
+    cv : int, cross-validation generator or an iterable, default=5
+        Determines the cross-validation splitting strategy.
+        Possible inputs for cv are:
+
+        - None, to use the efficient Leave-One-Out cross-validation
+        - integer, to specify the number of folds.
+        - :term:`CV splitter`,
+        - An iterable yielding (train, test) splits as arrays of indices.
+
+        For integer/None inputs, if ``y`` is binary or multiclass,
+        :class:`~sklearn.model_selection.StratifiedKFold` is used.
+    scoring : callable or str, default="accuracy"
+        A scorer callable object or scikit-learn scorer name.
+        Should accept (y_true, y_pred) and return a higher-is-better score.
+        Common choices: "accuracy", "f1", "precision", "recall".
+        If custom callable, signature must be scoring(y_true, y_pred) -> float.
+    cost_weight : float, default=0.0
+        Weight for the computational cost term in the objective:
+        objective = accuracy - cost_weight * (total_cost / n_samples).
+        Higher values penalize computational cost more heavily.
+        If 0.0 (default), only accuracy is optimized.
+    response_method : {"predict_proba", "decision_function"}, default="predict_proba"
+        Method by estimators for deferral score.
+        For ``"decision_function"``, ``thresholds`` can be negative.
+    return_earray : bool, default=True
+        Whether to return :class:`~skfb.core.ENDArray` of predicted classes
+        or plain numpy ndarray.
+    prefit : bool, default=False
+        Whether estimators are fitted. If True, checks their ``classes_`` attributes
+        for intercompatibility and skips fitting in ``fit()``.
+    n_jobs : int, default=None
+        Number of parallel jobs for CV grid search. -1 uses all processors.
+    verbose : int, default=0
+        Verbosity level.
+
+    Attributes
+    ----------
+    best_thresholds_ : list of float
+        Optimal deferral thresholds selected via CV grid search.
+    cv_results_ : dict
+        Cross-validation results with keys:
+
+        - ``mean_scores`` : array of shape (n_param_combinations,)
+          Mean test score for each threshold configuration.
+        - ``std_scores`` : array of shape (n_param_combinations,)
+          Standard deviation of test scores.
+        - ``param_list`` : list of threshold configurations tried.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from skfb.ensemble import ThresholdCascadeClassifierCV
+    >>> from sklearn.ensemble import RandomForestClassifier
+    >>> from sklearn.linear_model import LogisticRegression
+    >>> X = np.random.rand(100, 4)
+    >>> y = np.random.randint(0, 2, 100)
+    >>> maxent = LogisticRegression(random_state=0)
+    >>> rf = RandomForestClassifier(random_state=0, n_estimators=10)
+    >>> costs = [1.0, 5.0]  # Cascade: fast LR then slow RF
+    >>> cascade_cv = ThresholdCascadeClassifierCV(
+    ...     [maxent, rf],
+    ...     costs=costs,
+    ...     cv_thresholds=5,
+    ...     cv=3,
+    ...     cost_weight=0.1,
+    ... )
+    >>> cascade_cv.fit(X, y)
+    ThresholdCascadeClassifierCV(...)
+    >>> cascade_cv.predict(X[:5])
+    array([0, 1, 0, 1, 0])
+
+    Notes
+    -----
+    The threshold grid search explores all combinations of candidate thresholds
+    across estimators (cartesian product) and selects the combination with the
+    highest cost-aware score via cross-validation.
+
+    If you want a fallback option (for the last estimator), consider rejectors
+    from :mod:`skfb.estimators`.
+    """
+
+    _parameter_constraints = {
+        "estimators": ["array-like"],
+        "costs": ["array-like"],
+        "cv_thresholds": ["array-like", Interval(Real, None, None, closed="neither"), None],
+        "cv": ["cv_object"],
+        "scoring": [callable, StrOptions(set(get_scorer_names())), None],
+        "cost_weight": [Interval(Real, 0, None, closed="left")],
+        "response_method": [StrOptions({"decision_function", "predict_proba"})],
+        "return_earray": ["boolean"],
+        "prefit": ["boolean"],
+        "n_jobs": [Interval(Integral, -1, None, closed="left"), None],
+        "verbose": ["verbose"],
+    }
+
+    def __init__(
+        self,
+        estimators,
+        costs,
+        cv_thresholds=None,
+        cv=5,
+        scoring="accuracy",
+        cost_weight=0.0,
+        response_method="predict_proba",
+        return_earray=True,
+        prefit=False,
+        n_jobs=None,
+        verbose=0,
+    ):
+        super().__init__(
+            estimators=estimators,
+            thresholds=0.0,
+            response_method=response_method,
+            return_earray=return_earray,
+            prefit=prefit,
+            n_jobs=n_jobs,
+            verbose=verbose,
+        )
+        self.costs = costs
+        self.cv_thresholds = cv_thresholds
+        self.cv = cv
+        self.scoring = scoring
+        self.cost_weight = cost_weight
+
+    @_fit_context(prefer_skip_nested_validation=False)
+    @validate_params(
+        {
+            "X": ["array-like", "sparse matrix"],
+            "y": ["array-like"],
+            "sample_weight": ["array-like", None],
+        },
+        prefer_skip_nested_validation=True,
+    )
+    def fit(self, X, y, sample_weight=None):
+        """Fit estimators and optimize thresholds via cross-validation.
+
+        Parameters
+        ----------
+        X : {array-like, sparse matrix}, shape (n_samples, n_features)
+            The training input samples.
+        y : array-like, shape (n_samples,) or (n_samples, n_outputs)
+            The target values (class labels).
+        sample_weight : array-like of shape (n_samples,), default=None
+            Sample weights. If None, then samples are equally weighted.
+
+        Returns
+        -------
+        self : object
+            Returns self.
+        """
+        X, y = check_X_y(
+            X,
+            y,
+            accept_sparse=True,
+            allow_nd=True,
+            dtype=None,
+            ensure_2d=False,
+        )
+
+        self.classes_ = unique_labels(y)
+
+        # region Generate candidate thresholds if needed
+        if self.cv_thresholds is None or isinstance(self.cv_thresholds, int):
+            n_thresholds = self.cv_thresholds or _N_CV_THRESHOLDS
+            cv_thresholds = np.linspace(
+                1 / len(self.classes_),
+                _MAX_DEFAULT_CV_THRESHOLD,
+                n_thresholds,
+            )
+        else:
+            cv_thresholds = np.asarray(self.cv_thresholds)
+
+        self.cv_thresholds_ = cv_thresholds
+        # endregion
+
+        # region Fit base estimators if not prefit
+        if not hasattr(self, "estimators_"):
+            self.estimators_ = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
+                delayed(fit_one)(estimator, X, y, sample_weight)
+                for estimator in self.estimators
+            )
+        # endregion
+
+        # region Set up cross-validation and scorer
+        cv = check_cv(self.cv, y=y, classifier=True)
+        scorer = get_scorer(self.scoring)
+        # endregion
+
+        # region Generate all threshold combinations (grid search)
+        n_estimators = len(self.estimators_)
+
+        # Create all combinations of thresholds for n_estimators - 1 positions
+        # (last estimator doesn't have a threshold)
+        threshold_grids = [cv_thresholds] * (n_estimators - 1)
+        threshold_combinations = ParameterGrid(
+            {
+                f"threshold_{i}": thresholds
+                for i, thresholds in enumerate(threshold_grids)
+            },
+        )
+
+        # Convert to list of threshold tuples for _scoring_path
+        threshold_configs = [
+            tuple(combo[f"threshold_{i}"] for i in range(n_estimators - 1))
+            for combo in threshold_combinations
+        ]
+        # endregion
+
+        # region Run cross-validation scoring for all threshold combinations
+        all_scores = []
+
+        for threshold_config in threshold_configs:
+            cv_scores = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
+                delayed(_scoring_path)(
+                    self.estimators,
+                    self.costs,
+                    threshold_config,
+                    X[train_idx],
+                    X[test_idx],
+                    y[train_idx],
+                    y[test_idx],
+                    scorer,
+                    self.response_method,
+                    self.cost_weight,
+                )
+                for train_idx, test_idx in cv.split(X, y)
+            )
+            all_scores.append(cv_scores)
+        # endregion
+
+        # region Select best threshold configuration
+        all_scores = np.array(all_scores)  # Shape: (n_configs, n_splits)
+        best_idx = all_scores.mean(axis=1).argmax()
+        self.best_thresholds_ = list(threshold_configs[best_idx])
+        self.cv_scores_ = all_scores
+        # endregion
+
+        # region Set optimal thresholds and current estimators
+        self._set_thresholds(self.best_thresholds_)
+        self._current_estimators = self.estimators_[:]
+        self._current_thresholds = self.thresholds_[:]
+        # endregion
+
+        self.is_fitted_ = True
+
+        return self
