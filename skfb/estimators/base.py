@@ -15,7 +15,7 @@ from sklearn.metrics import accuracy_score
 
 from sklearn.utils.metaestimators import available_if
 from sklearn.utils.multiclass import unique_labels
-from sklearn.utils.validation import check_X_y, check_is_fitted
+from sklearn.utils.validation import check_is_fitted
 
 import numpy as np
 
@@ -163,8 +163,6 @@ class BaseFallbackClassifier(
         self : object
             Returns self.
         """
-        X, y = check_X_y(X, y, accept_sparse=True)
-
         classes_ = unique_labels(y)
 
         fallback_label_ = self.validate_fallback_label(self.fallback_label, classes_)

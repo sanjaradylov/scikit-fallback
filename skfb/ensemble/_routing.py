@@ -5,7 +5,7 @@ import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, check_is_fitted
 from sklearn.model_selection import check_cv
 from sklearn.utils.multiclass import unique_labels
-from sklearn.utils.validation import check_array, check_X_y
+from sklearn.utils.validation import check_array
 
 try:
     from sklearn.utils.parallel import delayed, Parallel
@@ -23,19 +23,17 @@ from ..utils._legacy import (
     Real,
     validate_params,
 )
-from ._common import fit_one, fit_and_predict_on_test
+from ._common import fit_one, fit_and_predict_one_on_test
 from ..core.array import earray
 
 
-class SingleModelRouterClassifier(BaseEstimator, ClassifierMixin):
-    """Defers input to the most appropriate classifier by selecting a single model per sample.
+class RoutingClassifier(BaseEstimator, ClassifierMixin):
+    """Defers input to the most appropriate classifier chosen through semantic routing.
 
     Trains a pool of estimators and a router that learns to select the best
     estimator for each input based on a cost vector. The router is trained
     using cross-validated predictions from the estimators to determine which
-    estimator is most appropriate for each input. If none of the estimators
-    predict correctly, a default estimator by `default_index` is used. If multiple
-    estimators predict correctly, the one with the lowest cost is chosen.
+    estimator is most appropriate for each input.
 
     Parameters
     ----------
@@ -44,12 +42,10 @@ class SingleModelRouterClassifier(BaseEstimator, ClassifierMixin):
     router : object
         Classifier used to route inputs to estimators.
     costs : float or list of float, default=None
-        List of costs associated with each estimator. If scalar, costs are uniform.
-        If None, defaults to uniform 1.0.
+        List of costs associated with each estimator (positive, higher is more costly).
+        If scalar, costs are uniform. If None, defaults to uniform 1.0.
     cv : int, cross-validation generator or an iterable, default=None
         Cross-validation strategy for training estimators and router.
-    default_index : int, default=-1
-        Index of the default estimator to use when no estimator predicts correctly.
     return_earray : bool, default=False
         Whether to return :class:`~skfb.core.array.ENDArray` of predicted classes
         or plain numpy ndarray. ENDArray tracks which estimator made each prediction.
@@ -63,7 +59,6 @@ class SingleModelRouterClassifier(BaseEstimator, ClassifierMixin):
         "router": [HasMethods(["fit", "predict"])],
         "costs": ["array-like", Interval(Real, 0, None, closed="left"), None],
         "cv": ["cv_object", None],
-        "default_index": [Integral],
         "return_earray": ["boolean"],
         "n_jobs": [Interval(Integral, -1, None, closed="left"), None],
     }
@@ -74,7 +69,6 @@ class SingleModelRouterClassifier(BaseEstimator, ClassifierMixin):
         router,
         costs=None,
         cv=None,
-        default_index=-1,
         return_earray=False,
         n_jobs=None,
     ):
@@ -82,7 +76,6 @@ class SingleModelRouterClassifier(BaseEstimator, ClassifierMixin):
         self.router = router
         self.costs = costs
         self.cv = cv
-        self.default_index = default_index
         self.return_earray = return_earray
         self.n_jobs = n_jobs
 
@@ -122,20 +115,6 @@ class SingleModelRouterClassifier(BaseEstimator, ClassifierMixin):
         self : object
             Returns self.
         """
-        # region Check training data
-        X, y = check_X_y(
-            X,
-            y,
-            accept_sparse=True,
-            allow_nd=True,
-            dtype=None,
-            ensure_2d=False,
-        )
-
-        if sample_weight is not None:
-            sample_weight = check_array(sample_weight, ensure_2d=False)
-        # endregion
-
         # Expose classes
         self.classes_ = unique_labels(y)
 
@@ -153,7 +132,7 @@ class SingleModelRouterClassifier(BaseEstimator, ClassifierMixin):
         self.cv_ = check_cv(self.cv, y=y, classifier=True)
 
         # Build router targets using cross-validated predictions
-        y_route = self.make_router_targets(X, y, sample_weight=sample_weight)
+        y_route = self._make_router_targets(X, y, sample_weight=sample_weight)
         # Fit router on inputs and router targets
         self.router_ = fit_one(self.router, X, y_route, sample_weight=sample_weight)
 
@@ -167,7 +146,7 @@ class SingleModelRouterClassifier(BaseEstimator, ClassifierMixin):
         self.is_fitted_ = True
         return self
 
-    def make_router_targets(
+    def _make_router_targets(
         self,
         X,
         y,
@@ -183,80 +162,60 @@ class SingleModelRouterClassifier(BaseEstimator, ClassifierMixin):
             Labels to train both estimator pool and router.
         sample_weight : array-like or None, default=None
         """
-        n_samples, n_estimators = X.shape[0], len(self.estimators)
-        # Predictions on folds of X by each estimator
-        y_pred = np.empty((n_estimators, n_samples), dtype=y.dtype)
+        n_samples = X.shape[0]
+        n_estimators = len(self.estimators)
+        n_classes = len(np.unique(y))
 
-        # region Make predictions on X and save in y_pred
+        # Accumulate probabilities (handle repeated CV folds)
+        y_proba_sum = np.zeros((n_estimators, n_samples, n_classes))
+        fold_counts = np.zeros(n_samples, dtype=int)
+
         for train_idx, test_idx in self.cv_.split(X, y):
             X_train, y_train = X[train_idx], y[train_idx]
             sw_train = None if sample_weight is None else sample_weight[train_idx]
             X_test = X[test_idx]
 
-            # Parallelize fitting and prediction across estimators
-            predictions = Parallel(n_jobs=self.n_jobs)(
-                delayed(fit_and_predict_on_test)(
-                    estimator, X_train, y_train, sw_train, X_test
+            # Get probability predictions from each estimator
+            probas = Parallel(n_jobs=self.n_jobs)(
+                delayed(fit_and_predict_one_on_test)(
+                    estimator, X_train, y_train, sw_train, X_test, "predict_proba",
                 )
                 for estimator in self.estimators
             )
 
-            # Store predictions in y_pred
-            for i, preds in enumerate(predictions):
-                y_pred[i, test_idx] = preds
-        # endregion
+            # Accumulate for averaging
+            for i, proba in enumerate(probas):
+                y_proba_sum[i, test_idx, :] += proba
+            fold_counts[test_idx] += 1
 
-        return self.collect_target_labels(y, y_pred)
+        # Average probabilities across folds
+        y_proba = y_proba_sum / fold_counts[np.newaxis, :, np.newaxis]
 
-    def collect_target_labels(self, y_true, Y_pred):
+        return self._collect_target_labels(y, y_proba)
+
+    def _collect_target_labels(self, y_true, y_proba):
         """Collects routing target labels based on estimator predictions and costs."""
-        n_estimators, n_samples = Y_pred.shape
-        # Routing targets (default to self.default_index when every estimator is wrong)
-        y_route = np.full(n_samples, self.default_index, dtype=int)
-        # Correctness mask
-        correct_mask = Y_pred == y_true[np.newaxis, :]
-        # Getting the optimal estimator index based on costs and correctness mask
-        utilities = np.full((n_estimators, n_samples), -np.inf, dtype=np.float64)
-        utilities[correct_mask] = (correct_mask * (-self.costs_)[:, np.newaxis])[
-            correct_mask
-        ]
-        # Did any estimator get a correct prediction?
-        correct_any = correct_mask.any(axis=0)
-        # If yes, assign the best estimator as a routing target
-        y_route[correct_any] = utilities.argmax(axis=0)[correct_any]
+        n_estimators, n_samples = y_proba.shape[0], y_proba.shape[1]
+        sample_idx = np.arange(n_samples)
+
+        # Compute log-loss: -log(P(true_class))
+        log_losses = np.zeros((n_estimators, n_samples))
+        for i in range(n_estimators):
+            true_class_proba = y_proba[i, sample_idx, y_true]
+            # Clip to avoid log(0) / log(epsilon)
+            true_class_proba = np.clip(true_class_proba, 1e-15, 1.0 - 1e-15)
+            log_losses[i] = -np.log(true_class_proba)
+
+        # Scale losses by cost and find best estimator per sample
+        cost_scaled_losses = log_losses * self.costs_[:, np.newaxis]
+        y_route = cost_scaled_losses.argmin(axis=0)
+
+        router_classes, router_class_counts = np.unique(y_route, return_counts=True)
+        self.router_class_ratios_ = dict(
+            zip(router_classes, router_class_counts / sum(router_class_counts))
+        )
 
         return y_route
-
-    @validate_params(
-        {
-            "X": ["array-like", "sparse matrix"],
-            "y": ["array-like"],
-            "sample_weight": ["array-like", None],
-        },
-        prefer_skip_nested_validation=True,
-    )
-    def score(self, X, y, sample_weight=None):
-        """Score predictions using accuracy.
-
-        Parameters
-        ----------
-        X : {array-like, sparse matrix}, shape (n_samples, n_features)
-            Samples to evaluate.
-        y : array-like, shape (n_samples,)
-            True labels for X.
-        sample_weight : array-like, shape (n_samples,), default=None
-            Sample weights. If None, then samples are equally weighted.
-
-        Returns
-        -------
-        score : float
-            Accuracy score.
-        """
-        from sklearn.metrics import accuracy_score
-
-        check_is_fitted(self, attributes="is_fitted_")
-        y_pred = self.predict(X)
-        return accuracy_score(y, y_pred, sample_weight=sample_weight)
 
     @validate_params(
         {
@@ -344,13 +303,6 @@ class SingleModelRouterClassifier(BaseEstimator, ClassifierMixin):
 
     def _predict(self, X, method):
         check_is_fitted(self, attributes="is_fitted_")
-        X = check_array(
-            X,
-            accept_sparse=True,
-            allow_nd=True,
-            dtype=None,
-            ensure_2d=False,
-        )
 
         y_route = self.router_.predict(X)
 

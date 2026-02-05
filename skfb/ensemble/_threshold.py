@@ -9,12 +9,8 @@ import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, check_is_fitted, clone
 from sklearn.metrics import accuracy_score, get_scorer, get_scorer_names
 from sklearn.model_selection import check_cv, ParameterGrid
-from sklearn.utils.validation import (
-    check_array,
-    check_X_y,
-    NotFittedError,
-)
 from sklearn.utils.multiclass import unique_labels
+from sklearn.utils.validation import NotFittedError
 
 try:
     from sklearn.utils.parallel import delayed, Parallel
@@ -188,15 +184,6 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         self : object
             Returns self.
         """
-        X, y = check_X_y(
-            X,
-            y,
-            accept_sparse=True,
-            allow_nd=True,
-            dtype=None,
-            ensure_2d=False,
-        )
-
         self.classes_ = unique_labels(y)
 
         if not hasattr(self, "estimators_"):
@@ -237,13 +224,6 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
             Classes predicted by the base estimators.
         """
         check_is_fitted(self, attributes="is_fitted_")
-        X = check_array(
-            X,
-            accept_sparse=True,
-            allow_nd=True,
-            dtype=None,
-            ensure_2d=False,
-        )
 
         y_score = self._predict_scores(X)
 
@@ -282,13 +262,6 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
             Probabilities predicted by the base estimators.
         """
         check_is_fitted(self, attributes="is_fitted_")
-        X = check_array(
-            X,
-            accept_sparse=True,
-            allow_nd=True,
-            dtype=None,
-            ensure_2d=False,
-        )
         return self._predict_scores(X)
 
     @validate_params(
@@ -338,13 +311,6 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
             Decision scores predicted by the base estimators.
         """
         check_is_fitted(self, attributes="is_fitted_")
-        X = check_array(
-            X,
-            accept_sparse=True,
-            allow_nd=True,
-            dtype=None,
-            ensure_2d=False,
-        )
         return self._predict_scores(X)
 
     @validate_params(
@@ -829,15 +795,6 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
         self : object
             Returns self.
         """
-        X, y = check_X_y(
-            X,
-            y,
-            accept_sparse=True,
-            allow_nd=True,
-            dtype=None,
-            ensure_2d=False,
-        )
-
         self.classes_ = unique_labels(y)
 
         # region Generate candidate thresholds if needed

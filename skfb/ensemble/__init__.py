@@ -2,12 +2,12 @@
 
 __all__ = (
     "CascadeNotFittedWarning",
-    "SingleModelRouterClassifier",
+    "RoutingClassifier",
     "ThresholdCascadeClassifier",
     "ThresholdCascadeClassifierCV",
 )
 
-from ._router import SingleModelRouterClassifier
+from ._routing import RoutingClassifier
 from ._threshold import (
     CascadeNotFittedWarning,
     ThresholdCascadeClassifier,

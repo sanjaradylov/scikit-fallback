@@ -22,7 +22,14 @@ def fit_and_predict_one(estimator, X, y, sample_weight=None):
     return estimator.predict(X)
 
 
-def fit_and_predict_on_test(estimator, X_train, y_train, sample_weight, X_test):
+def fit_and_predict_one_on_test(
+    estimator,
+    X_train,
+    y_train,
+    sample_weight,
+    X_test,
+    response_method="predict_proba",
+):
     """Fit estimator and predict on test set."""
-    fitted = fit_one(estimator, X_train, y_train, sample_weight)
-    return np.asarray(fitted.predict(X_test))
+    estimator = fit_one(estimator, X_train, y_train, sample_weight)
+    return getattr(estimator, response_method)(X_test)
