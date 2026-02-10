@@ -171,9 +171,13 @@ class RoutingClassifier(BaseEstimator, ClassifierMixin):
         fold_counts = np.zeros(n_samples, dtype=int)
 
         for train_idx, test_idx in self.cv_.split(X, y):
-            X_train, y_train = X[train_idx], y[train_idx]
-            sw_train = None if sample_weight is None else sample_weight[train_idx]
-            X_test = X[test_idx]
+            X_train = np.take(X, train_idx, axis=0)
+            y_train = np.take(y, train_idx, axis=0)
+            X_test = np.take(X, test_idx, axis=0)
+            if sample_weight is not None:
+                sw_train = np.take(sample_weight, train_idx, axis=0)
+            else:
+                sw_train = None
 
             # Get probability predictions from each estimator
             probas = Parallel(n_jobs=self.n_jobs)(

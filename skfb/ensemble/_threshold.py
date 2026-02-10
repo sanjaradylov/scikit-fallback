@@ -15,10 +15,7 @@ from sklearn.utils.validation import NotFittedError
 try:
     from sklearn.utils.parallel import delayed, Parallel
 except ModuleNotFoundError:
-    from joblib import Parallel
-
-    # pylint: disable=ungrouped-imports
-    from sklearn.utils.fixes import delayed
+    from joblib import Parallel, delayed
 
 from ..utils._legacy import (
     _fit_context,
@@ -30,11 +27,19 @@ from ..utils._legacy import (
 )
 from ._common import fit_one
 from ..core.array import earray
-from ..core.exceptions import SKFBWarning
+from ..core.exceptions import SKFBException, SKFBWarning
 
 
 class CascadeNotFittedWarning(SKFBWarning):
     """Raised if base estimators in cascade are not fitted or fitted incorrectly."""
+
+
+class CascadeParetoConfigWarning(SKFBWarning):
+    """Raised if no Pareto configuration satisfies cost-performance constraints."""
+
+
+class CascadeParetoConfigException(SKFBException):
+    """Raised if no Pareto configuration satisfies cost-performance constraints."""
 
 
 class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
@@ -490,7 +495,7 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
                 break
 
             # region Predict currently deferred samples
-            X_remaining = X[remaining_idx]
+            X_remaining = np.take(X, remaining_idx, axis=0)
             y_score_remaining = getattr(estimator, self.response_method)(X_remaining)
             if self.response_method == "predict_proba":
                 max_score = np.max(y_score_remaining, axis=1)
@@ -525,173 +530,110 @@ _N_CV_THRESHOLDS = 10
 _MAX_DEFAULT_CV_THRESHOLD = 0.95
 
 
-def _cost_aware_score(y_true, y_pred, scorer, costs, cost_weight=0.0):
-    """Compute cost-aware score balancing accuracy and computational costs.
-
-    Follows the Cascadia approach: combines accuracy score with accumulated
-    computational costs of using different estimators in the cascade.
-
-    Parameters
-    ----------
-    y_true : array-like
-        True labels.
-    y_pred : FBNDArray or ndarray
-        Predictions with optional ensemble mask.
-    scorer : callable or sklearn scorer
-        Scorer object. Can be sklearn scorer (which has _score_func method)
-        or a plain callable that takes (y_true, y_pred).
-    costs : array-like
-        Cost per estimator (includes all estimators).
-    cost_weight : float, default=0.0
-        Weight for the cost term. Higher values penalize computational cost more.
-
-    Returns
-    -------
-    score : float
-        Cost-aware score.
-    """
-    # Get base accuracy score using the scorer
-    # If it's a sklearn scorer, use _score_func; otherwise call directly.
-    if hasattr(scorer, "_score_func"):
-        accuracy = scorer._score_func(y_true, y_pred)
-    else:
-        accuracy = scorer(y_true, y_pred)
-
-    # If cost_weight is 0 or y_pred is not an array with ensemble_mask,
-    # return accuracy only.
-    if cost_weight == 0.0 or not hasattr(y_pred, "ensemble_mask"):
-        return accuracy
-
-    # Calculate total cost from ensemble mask
-    # ensemble_mask shape: (n_samples, n_estimators).
-    n_samples = y_pred.ensemble_mask.shape[0]
-    ensemble_costs = y_pred.ensemble_mask @ np.array(costs)  # Cost per sample
-    total_cost = ensemble_costs.sum() / n_samples  # Average cost
-
-    # Return combined score: accuracy - cost_weight * avg_cost
-    return accuracy - cost_weight * total_cost
+def _fitting_path(estimators, response_method, X, y, sample_weight):
+    """Trains cascaded estimators."""
+    return fit_one(
+        ThresholdCascadeClassifier(
+            clone(estimators),
+            thresholds=0.0,
+            response_method=response_method,
+            return_earray=True,
+            prefit=False,
+            n_jobs=None,
+            verbose=False,
+        ),
+        X,
+        y,
+        sample_weight=sample_weight,
+    )
 
 
 def _scoring_path(
-    estimators,
-    costs,
+    cascade,
     thresholds,
-    X_train,
-    X_test,
-    y_train,
-    y_test,
-    scorer,
-    response_method,
-    cost_weight=0.0,
+    costs,
+    X,
+    y,
+    scoring,
 ):
-    """Trains cascade and scores with cost-aware metric.
-
-    Parameters
-    ----------
-    estimators : list
-        Base estimators to train.
-    costs : array-like
-        Cost per estimator.
-    thresholds : array-like or float
-        Deferral thresholds for cascade.
-    X_train, X_test : array-like
-        Training and test features.
-    y_train, y_test : array-like
-        Training and test labels.
-    scorer : callable
-        Scorer function.
-    response_method : str
-        Method for confidence scores.
-    cost_weight : float, default=0.0
-        Weight for computational cost in the objective.
-
-    Returns
-    -------
-    score : float
-        Cost-aware score on test set.
-    """
-    cascade = ThresholdCascadeClassifier(
-        clone(estimators),
-        thresholds=thresholds,
-        response_method=response_method,
-        return_earray=True,
-        prefit=False,
-        n_jobs=None,
-        verbose=False,
-    )
-    y_pred = cascade.fit(X_train, y_train).predict(X_test)
-    score = _cost_aware_score(y_test, y_pred, scorer, costs, cost_weight)
-    return score
+    """Trains cascade and scores with accuracy metric."""
+    y_pred = cascade.set_params(thresholds=thresholds).predict(X)
+    if hasattr(scoring, "_score_func"):
+        score = scoring._score_func(y, y_pred)
+    else:
+        score = scoring(y, y_pred)
+    cost = y_pred.acceptance_rates @ costs
+    return score, cost
 
 
 class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
-    """Cascade of classifiers w/ deferrals based on tuned thresholds.
+    """Cascade of classifiers with Pareto-optimized deferral thresholds.
 
-    Optimizes deferral thresholds via cross-validation and grid search to balance
-    classification accuracy with computational costs.
-    During inference, runs the first estimator and if a predicted score is lower than
-    ``thresholds[0]``, tries the second, and so on. The last estimator always makes
-    predictions on the samples deferred by the previous estimators.
+    Optimizes deferral thresholds via cross-validation grid search, identifying
+    non-dominated (Pareto-optimal) threshold configurations that balance accuracy
+    and computational cost. Users can select thresholds based on performance
+    constraints or cost budgets.
+
+    During inference, runs the first estimator and if a predicted score is lower
+    than ``thresholds[0]``, tries the second, and so on. The last estimator always
+    makes predictions on deferred samples.
 
     Parameters
     ----------
     estimators : array-like of object, length n_estimators
-        Base estimators. Preferrably, from weakest (e.g., rule-based or linear) to
-        strongest (e.g., gradient boosting).
+        Base estimators. Preferably ordered from weakest (fast, low-accuracy) to
+        strongest (slow, high-accuracy).
     costs : array-like of shape (n_estimators,)
-        Computational cost per estimator. Used to optimize thresholds balancing
-        accuracy and computational efficiency.
+        Computational cost per estimator. Used to identify non-dominated
+        threshold configurations along the accuracy-cost tradeoff.
     cv_thresholds : array-like of shape (n_thresholds,) or int, default=None
-        Array of candidate deferral thresholds to evaluate via grid search.
-        If None, defaults to 10 thresholds linearly spaced from 1/n_classes to 0.95.
-        If int, generates that many thresholds in the same range.
-    cv : int, cross-validation generator or an iterable, default=5
-        Determines the cross-validation splitting strategy.
-        Possible inputs for cv are:
+        Candidate deferral thresholds for grid search. If None, defaults to 10
+        thresholds linearly spaced from 1/n_classes to 0.95. If int, generates
+        that many thresholds in the same range.
+    cv : int, cross-validation generator or iterable, default=5
+        Cross-validation splitting strategy. Accepts:
 
-        - None, to use the efficient Leave-One-Out cross-validation
-        - integer, to specify the number of folds.
-        - :term:`CV splitter`,
-        - An iterable yielding (train, test) splits as arrays of indices.
-
-        For integer/None inputs, if ``y`` is binary or multiclass,
-        :class:`~sklearn.model_selection.StratifiedKFold` is used.
+        - int: number of folds (uses StratifiedKFold for classification)
+        - CV splitter object
+        - Iterable yielding (train_idx, test_idx) splits
     scoring : callable or str, default="accuracy"
-        A scorer callable object or scikit-learn scorer name.
-        Should accept (y_true, y_pred) and return a higher-is-better score.
-        Common choices: "accuracy", "f1", "precision", "recall".
-        If custom callable, signature must be scoring(y_true, y_pred) -> float.
-    cost_weight : float, default=0.0
-        Weight for the computational cost term in the objective:
-        objective = accuracy - cost_weight * (total_cost / n_samples).
-        Higher values penalize computational cost more heavily.
-        If 0.0 (default), only accuracy is optimized.
+        Scorer for threshold evaluation. Can be a scikit-learn scorer name
+        (e.g., "accuracy", "f1") or a callable with signature
+        ``scorer(y_true, y_pred) -> float`` (higher is better).
+    min_score : float, default=None
+        Minimum acceptable cross-validation score. If specified, selects the
+        Pareto config with lowest cost meeting this accuracy constraint.
+        If None (default), uses the highest-accuracy Pareto config.
+    max_cost : float, default=None
+        Maximum acceptable computational cost. If specified, selects the
+        Pareto config with highest accuracy within this cost budget.
+        If None (default), uses the highest-accuracy Pareto config.
+    raise_error : bool, default=False
+        Whether to raise ``CascadeParetoConfigException`` if no Pareto configuration
+        satisfies the specified constraints (min_score, max_cost). If False (default),
+        issues a warning and falls back to the highest-accuracy Pareto config.
     response_method : {"predict_proba", "decision_function"}, default="predict_proba"
-        Method by estimators for deferral score.
-        For ``"decision_function"``, ``thresholds`` can be negative.
+        Method by estimators for computing deferral scores.
     return_earray : bool, default=True
-        Whether to return :class:`~skfb.core.ENDArray` of predicted classes
+        Whether to return :class:`~skfb.core.ENDArray` with ensemble mask
         or plain numpy ndarray.
     prefit : bool, default=False
-        Whether estimators are fitted. If True, checks their ``classes_`` attributes
-        for intercompatibility and skips fitting in ``fit()``.
+        If True, estimators are assumed fitted; skips training in ``fit()``.
     n_jobs : int, default=None
-        Number of parallel jobs for CV grid search. -1 uses all processors.
+        Parallel jobs for CV grid search. -1 uses all processors.
     verbose : int, default=0
         Verbosity level.
 
     Attributes
     ----------
     best_thresholds_ : list of float
-        Optimal deferral thresholds selected via CV grid search.
-    cv_results_ : dict
-        Cross-validation results with keys:
-
-        - ``mean_scores`` : array of shape (n_param_combinations,)
-          Mean test score for each threshold configuration.
-        - ``std_scores`` : array of shape (n_param_combinations,)
-          Standard deviation of test scores.
-        - ``param_list`` : list of threshold configurations tried.
+        Best selected thresholds.
+    all_cv_thresholds_ : ndarray, shape (n_configs, n_splits)
+        All generated threshold configurations.
+    mean_cv_scores_ : ndarray, shape (n_configs,)
+        Average cross-validated classification scores.
+    mean_cv_costs_ : ndarray, shape (n_configs,)
+        Average cross-validated computational costs.
 
     Examples
     --------
@@ -701,28 +643,36 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
     >>> from sklearn.linear_model import LogisticRegression
     >>> X = np.random.rand(100, 4)
     >>> y = np.random.randint(0, 2, 100)
-    >>> maxent = LogisticRegression(random_state=0)
-    >>> rf = RandomForestClassifier(random_state=0, n_estimators=10)
-    >>> costs = [1.0, 5.0]  # Cascade: fast LR then slow RF
     >>> cascade_cv = ThresholdCascadeClassifierCV(
-    ...     [maxent, rf],
-    ...     costs=costs,
+    ...     [LogisticRegression(random_state=0),
+    ...      RandomForestClassifier(random_state=0)],
+    ...     costs=[1.0, 5.0],
     ...     cv_thresholds=5,
     ...     cv=3,
-    ...     cost_weight=0.1,
     ... )
     >>> cascade_cv.fit(X, y)
     ThresholdCascadeClassifierCV(...)
     >>> cascade_cv.predict(X[:5])
     array([0, 1, 0, 1, 0])
+    >>> # Fit with min accuracy constraint: use cheapest config achieving ≥90%
+    >>> cascade_cv_constrained = ThresholdCascadeClassifierCV(
+    ...     [LogisticRegression(random_state=0),
+    ...      RandomForestClassifier(random_state=0)],
+    ...     costs=[1.0, 5.0],
+    ...     min_score=0.90,
+    ... )
+    >>> cascade_cv_constrained.fit(X, y)
+    ThresholdCascadeClassifierCV(...)
+    >>> cascade_cv_constrained.predict(X[:5])
+    array([0, 1, 0, 1, 0])
 
     Notes
     -----
-    The threshold grid search explores all combinations of candidate thresholds
-    across estimators (cartesian product) and selects the combination with the
-    highest cost-aware score via cross-validation.
+    The Pareto front contains all non-dominated configurations: those where no
+    other configuration achieves both strictly higher score AND strictly lower
+    cost.
 
-    If you want a fallback option (for the last estimator), consider rejectors
+    If you want a fallback option for the last estimator, consider rejectors
     from :mod:`skfb.estimators`.
     """
 
@@ -732,7 +682,10 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
         "cv_thresholds": ["array-like", Interval(Real, None, None, closed="neither"), None],
         "cv": ["cv_object"],
         "scoring": [callable, StrOptions(set(get_scorer_names())), None],
-        "cost_weight": [Interval(Real, 0, None, closed="left")],
+        "min_score": [Interval(Real, None, None, closed="neither"), None],
+        "max_cost": [Interval(Real, 0, None, closed="left"), None],
+        "strategy": [StrOptions({"min_score", "max_cost", "balanced"})],
+        "raise_error": ["boolean"],
         "response_method": [StrOptions({"decision_function", "predict_proba"})],
         "return_earray": ["boolean"],
         "prefit": ["boolean"],
@@ -745,12 +698,14 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
         estimators,
         costs,
         cv_thresholds=None,
+        min_score=None,
+        max_cost=None,
+        strategy="min_score",
         cv=5,
         scoring="accuracy",
-        cost_weight=0.0,
+        raise_error=False,
         response_method="predict_proba",
         return_earray=True,
-        prefit=False,
         n_jobs=None,
         verbose=0,
     ):
@@ -759,7 +714,7 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
             thresholds=0.0,
             response_method=response_method,
             return_earray=return_earray,
-            prefit=prefit,
+            prefit=False,
             n_jobs=n_jobs,
             verbose=verbose,
         )
@@ -767,7 +722,76 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
         self.cv_thresholds = cv_thresholds
         self.cv = cv
         self.scoring = scoring
-        self.cost_weight = cost_weight
+        self.min_score = min_score
+        self.max_cost = max_cost
+        self.strategy = strategy
+        self.raise_error = raise_error
+
+    def _select_best_thresholds(self):
+        """Identifies non-dominated (Pareto-optimal) threshold configurations.
+
+        A configuration is Pareto-optimal if no other configuration achieves both
+        strictly higher accuracy AND strictly lower cost.
+        """
+        feasible = np.ones(len(self.all_cv_thresholds_), dtype=bool)
+        if self.min_score is not None:
+            feasible &= self.mean_cv_scores_ >= self.min_score
+        if self.max_cost is not None:
+            feasible &= self.mean_cv_costs_ <= self.max_cost
+
+        if not np.any(feasible):
+            if self.raise_error:
+                raise CascadeParetoConfigException(
+                    f"No threshold configuration satisfies constraints: "
+                    f"min_score={self.min_score} and max_cost={self.max_cost}."
+                )
+            else:
+                default_idx = np.argmax(self.mean_cv_scores_ / self.mean_cv_costs_)
+                self.best_thresholds_ = self.all_cv_thresholds_[default_idx]
+
+                warnings.warn(
+                    (
+                        f"No threshold configuration satisfies constraints: "
+                        f"min_score={self.min_score} and max_cost={self.max_cost}; "
+                        f"setting thresholds = {self.best_thresholds_} giving "
+                        f"max(scores / costs)."
+                    ),
+                    category=CascadeParetoConfigWarning,
+                )
+        else:
+            feasible_idx = np.where(feasible)[0]
+            feasible_scores = self.mean_cv_scores_[feasible_idx]
+            feasible_costs = self.mean_cv_costs_[feasible_idx]
+
+            pareto = np.ones(len(feasible_idx), dtype=bool)
+
+            for i in range(len(feasible_idx)):
+                for j in range(len(feasible_idx)):
+                    if i != j:
+                        j_dominates_i = (
+                            feasible_scores[j] >= feasible_scores[i]
+                            and feasible_costs[j] <= feasible_costs[i]
+                            and (
+                                feasible_scores[j] != feasible_scores[i]
+                                or feasible_costs[j] != feasible_costs[i]
+                            )
+                        )
+                        if j_dominates_i:
+                            pareto[i] = False
+                            break
+
+            pareto_idx = feasible_idx[pareto]
+            pareto_scores = self.mean_cv_scores_[pareto_idx]
+            pareto_costs = self.mean_cv_costs_[pareto_idx]
+
+            if self.strategy == "max_score":
+                best_idx = np.argmax(pareto_scores)
+            elif self.strategy == "min_cost":
+                best_idx = np.argmin(pareto_costs)
+            else:
+                best_idx = np.argmax(pareto_scores / pareto_costs)
+
+            self.best_thresholds_ = self.all_cv_thresholds_[best_idx]
 
     @_fit_context(prefer_skip_nested_validation=False)
     @validate_params(
@@ -779,106 +803,130 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
         prefer_skip_nested_validation=True,
     )
     def fit(self, X, y, sample_weight=None):
-        """Fit estimators and optimize thresholds via cross-validation.
+        """Fit estimators and identify Pareto-optimal threshold configurations.
 
         Parameters
         ----------
         X : {array-like, sparse matrix}, shape (n_samples, n_features)
-            The training input samples.
+            Training input samples.
         y : array-like, shape (n_samples,) or (n_samples, n_outputs)
-            The target values (class labels).
+            Target class labels.
         sample_weight : array-like of shape (n_samples,), default=None
-            Sample weights. If None, then samples are equally weighted.
+            Sample weights. If None, samples are equally weighted.
 
         Returns
         -------
         self : object
-            Returns self.
+            Fitted estimator. Use ``predict()`` and/or ``set_params()`` methods.
         """
         self.classes_ = unique_labels(y)
 
-        # region Generate candidate thresholds if needed
+        # region Process costs
+        if isinstance(self.costs, (tuple, int)):
+            self.costs_ = np.array([self.costs] * len(self.estimators))
+        else:
+            self.costs_ = np.asarray(self.costs)
+        # endregion
+
+        # region Generate candidate thresholds
         if self.cv_thresholds is None or isinstance(self.cv_thresholds, int):
             n_thresholds = self.cv_thresholds or _N_CV_THRESHOLDS
-            cv_thresholds = np.linspace(
+            self.cv_thresholds_ = np.linspace(
                 1 / len(self.classes_),
                 _MAX_DEFAULT_CV_THRESHOLD,
                 n_thresholds,
             )
         else:
-            cv_thresholds = np.asarray(self.cv_thresholds)
-
-        self.cv_thresholds_ = cv_thresholds
+            self.cv_thresholds_ = np.asarray(self.cv_thresholds)
         # endregion
 
-        # region Fit base estimators if not prefit
-        if not hasattr(self, "estimators_"):
-            self.estimators_ = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
-                delayed(fit_one)(estimator, X, y, sample_weight)
-                for estimator in self.estimators
-            )
+        # region Setup cross-validation and scorer
+        self.cv_ = check_cv(self.cv, y=y, classifier=True)
+        self.scoring_ = get_scorer(self.scoring)
         # endregion
 
-        # region Set up cross-validation and scorer
-        cv = check_cv(self.cv, y=y, classifier=True)
-        scorer = get_scorer(self.scoring)
-        # endregion
-
-        # region Generate all threshold combinations (grid search)
-        n_estimators = len(self.estimators_)
-
-        # Create all combinations of thresholds for n_estimators - 1 positions
-        # (last estimator doesn't have a threshold)
-        threshold_grids = [cv_thresholds] * (n_estimators - 1)
+        # region Generate all threshold combinations
+        threshold_grids = [self.cv_thresholds_] * (len(self.estimators) - 1)
         threshold_combinations = ParameterGrid(
             {
                 f"threshold_{i}": thresholds
                 for i, thresholds in enumerate(threshold_grids)
             },
         )
-
-        # Convert to list of threshold tuples for _scoring_path
-        threshold_configs = [
-            tuple(combo[f"threshold_{i}"] for i in range(n_estimators - 1))
+        self.all_cv_thresholds_ = [
+            tuple(combo[f"threshold_{i}"] for i in range(len(self.estimators) - 1))
             for combo in threshold_combinations
         ]
+        self.all_cv_thresholds_ = np.array(self.all_cv_thresholds_)
         # endregion
 
-        # region Run cross-validation scoring for all threshold combinations
-        all_scores = []
-
-        for threshold_config in threshold_configs:
-            cv_scores = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
-                delayed(_scoring_path)(
-                    self.estimators,
-                    self.costs,
-                    threshold_config,
-                    X[train_idx],
-                    X[test_idx],
-                    y[train_idx],
-                    y[test_idx],
-                    scorer,
-                    self.response_method,
-                    self.cost_weight,
-                )
-                for train_idx, test_idx in cv.split(X, y)
+        # region Temporarily train estimators on different folds
+        cascades = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
+            delayed(_fitting_path)(
+                self.estimators,
+                self.response_method,
+                np.take(X, train_idx, axis=0),
+                np.take(y, train_idx, axis=0),
+                (
+                    np.take(sample_weight, train_idx, axis=0)
+                    if sample_weight is not None
+                    else None
+                ),
             )
-            all_scores.append(cv_scores)
+            for train_idx, _ in self.cv_.split(X, y)
+        )
+        cascades = np.array(cascades)
         # endregion
 
-        # region Select best threshold configuration
-        all_scores = np.array(all_scores)  # Shape: (n_configs, n_splits)
-        best_idx = all_scores.mean(axis=1).argmax()
-        self.best_thresholds_ = list(threshold_configs[best_idx])
-        self.cv_scores_ = all_scores
+        # region Cross-validation
+        results = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
+            delayed(_scoring_path)(
+                cascade,
+                thresholds,
+                self.costs_,
+                np.take(X, test_idx, axis=0),
+                np.take(y, test_idx, axis=0),
+                self.scoring_,
+            )
+            for thresholds in self.all_cv_thresholds_
+            for cascade, (_, test_idx) in zip(cascades, self.cv_.split(X, y))
+        )
+        scores_and_costs = np.array(results).reshape(
+            len(self.all_cv_thresholds_), len(cascades), 2
+        )
+        self.mean_cv_scores_ = scores_and_costs[:, :, 0].mean(axis=1)
+        self.mean_cv_costs_ = scores_and_costs[:, :, 1].mean(axis=1)
         # endregion
 
-        # region Set optimal thresholds and current estimators
-        self._set_thresholds(self.best_thresholds_)
-        self._current_estimators = self.estimators_[:]
-        self._current_thresholds = self.thresholds_[:]
+        # region Set default thresholds and estimators
+        self.set_params(min_score=self.min_score, max_cost=self.max_cost)
+        super().fit(X, y, sample_weight=sample_weight)
         # endregion
 
-        self.is_fitted_ = True
+        return self
+
+    def set_params(self, **params):
+        """Sets the parameters of the cascade.
+
+        If thresholds or new constraints are provided, the transformations are done
+        accordingly, so there is no need to refit the cascade.
+
+        Parameters
+        ----------
+        **params : dict
+            Cascade parameters.
+
+        Returns
+        -------
+        self : object
+            Returns self.
+        """
+        super().set_params(**params)
+
+        max_cost = params.get("max_cost", "not-given")
+        min_score = params.get("min_score", "not-given")
+        if max_cost != "not-given" or min_score != "not-given":
+            self._select_best_thresholds()
+            self._set_thresholds(self.best_thresholds_)
 
         return self
