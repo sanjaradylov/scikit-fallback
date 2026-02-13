@@ -471,7 +471,7 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
             Confidence scores (probabilities or decision scores, depending on
             `self.response_method`).
         """
-        n_samples = X.shape[0]
+        n_samples = len(X)
         n_estimators = len(self._current_estimators)
         n_classes = self._current_estimators[0].classes_.shape[0]
 
@@ -784,14 +784,14 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
             pareto_scores = self.mean_cv_scores_[pareto_idx]
             pareto_costs = self.mean_cv_costs_[pareto_idx]
 
-            if self.strategy == "max_score":
+            if self.strategy == "min_score":
                 best_idx = np.argmax(pareto_scores)
-            elif self.strategy == "min_cost":
+            elif self.strategy == "max_cost":
                 best_idx = np.argmin(pareto_costs)
             else:
                 best_idx = np.argmax(pareto_scores / pareto_costs)
 
-            self.best_thresholds_ = self.all_cv_thresholds_[best_idx]
+            self.best_thresholds_ = self.all_cv_thresholds_[pareto_idx[best_idx]]
 
     @_fit_context(prefer_skip_nested_validation=False)
     @validate_params(
@@ -920,13 +920,29 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
         -------
         self : object
             Returns self.
-        """
-        super().set_params(**params)
 
-        max_cost = params.get("max_cost", "not-given")
-        min_score = params.get("min_score", "not-given")
-        if max_cost != "not-given" or min_score != "not-given":
+        Raises
+        ------
+        ValueError
+            If all `min_score`, `max_cost`, and `thresholds` are passed.
+        """
+        not_given = "not-given"
+        max_cost = params.get("max_cost", not_given)
+        min_score = params.get("min_score", not_given)
+        thresholds = params.get("thresholds", not_given)
+
+        if all(p != not_given for p in (max_cost, min_score, thresholds)):
+            raise ValueError(
+                "Pass either min_score and max_cost or thresholds. "
+                "The former will automatically determine the best thresholds."
+            )
+
+        elif thresholds != not_given:
+            self._set_thresholds(thresholds)
+            params.pop("thresholds")
+
+        elif max_cost != not_given or min_score != not_given:
             self._select_best_thresholds()
             self._set_thresholds(self.best_thresholds_)
 
-        return self
+        return super().set_params(**params)

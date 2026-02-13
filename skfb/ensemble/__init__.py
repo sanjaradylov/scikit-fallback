@@ -2,6 +2,8 @@
 
 __all__ = (
     "CascadeNotFittedWarning",
+    "CascadeParetoConfigException",
+    "CascadeParetoConfigWarning",
     "RoutingClassifier",
     "ThresholdCascadeClassifier",
     "ThresholdCascadeClassifierCV",
@@ -10,6 +12,8 @@ __all__ = (
 from ._routing import RoutingClassifier
 from ._threshold import (
     CascadeNotFittedWarning,
+    CascadeParetoConfigException,
+    CascadeParetoConfigWarning,
     ThresholdCascadeClassifier,
     ThresholdCascadeClassifierCV,
 )

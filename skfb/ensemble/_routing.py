@@ -2,9 +2,9 @@
 
 import numpy as np
 
-from sklearn.base import BaseEstimator, ClassifierMixin, check_is_fitted
+from sklearn.base import BaseEstimator, ClassifierMixin, check_array, check_is_fitted
 from sklearn.model_selection import check_cv
-from sklearn.utils.multiclass import unique_labels
+from sklearn.utils.multiclass import type_of_target, unique_labels
 from sklearn.utils.validation import check_array
 
 try:
@@ -30,8 +30,8 @@ from ..core.array import earray
 class RoutingClassifier(BaseEstimator, ClassifierMixin):
     """Defers input to the most appropriate classifier chosen through semantic routing.
 
-    Trains a pool of estimators and a router that learns to select the best
-    estimator for each input based on a cost vector. The router is trained
+    Trains a pool of `estimators` and a `router` that learns to select the best
+    estimator for each input based on a `costs` vector. The router is trained
     using cross-validated predictions from the estimators to determine which
     estimator is most appropriate for each input.
 
@@ -92,10 +92,10 @@ class RoutingClassifier(BaseEstimator, ClassifierMixin):
         """Trains estimators and router.
 
         Steps:
-        - Validate inputs and determine classes.
         - Use cross-validated predictions from candidate estimators to
           build routing targets (best estimator index per sample).
-        - Train the router on full data to predict chosen estimator index.
+        - Train the router on full data and store it in `self.router_`
+          to predict chosen estimator index.
         - Fit all candidate estimators on full data and store them in
           `self.estimators_` for inference.
 
@@ -107,15 +107,12 @@ class RoutingClassifier(BaseEstimator, ClassifierMixin):
             The target values.
         sample_weight : array-like, shape (n_samples,), default=None
             Sample weights. If None, then samples are equally weighted.
-        **fit_params : dict
-            Additional fit parameters.
 
         Returns
         -------
         self : object
             Returns self.
         """
-        # Expose classes
         self.classes_ = unique_labels(y)
 
         # region Normalize costs
@@ -144,6 +141,8 @@ class RoutingClassifier(BaseEstimator, ClassifierMixin):
         # endregion
 
         self.is_fitted_ = True
+        self._route_target_type = type_of_target(y_route)
+
         return self
 
     def _make_router_targets(
@@ -152,17 +151,8 @@ class RoutingClassifier(BaseEstimator, ClassifierMixin):
         y,
         sample_weight=None,
     ):
-        """Builds data for router training.
-
-        Parameters
-        ----------
-        X : array-like, shape = (n_samples, n_features)
-            Features to train both estimator pool and router.
-        y : array-like, shape = n_samples
-            Labels to train both estimator pool and router.
-        sample_weight : array-like or None, default=None
-        """
-        n_samples = X.shape[0]
+        """Builds data for router training."""
+        n_samples = len(X)
         n_estimators = len(self.estimators)
         n_classes = len(np.unique(y))
 
@@ -300,40 +290,54 @@ class RoutingClassifier(BaseEstimator, ClassifierMixin):
 
         Returns
         -------
-        y_score : ndarray
+        y_score : ndarray, shape (n_samples, n_classes) or (n_samples,)
             Decision function values.
         """
         return self._predict(X, "decision_function")
 
     def _predict(self, X, method):
+        """Main function to route inputs and make predictions."""
         check_is_fitted(self, attributes="is_fitted_")
+        # Ensure we can extract input metadata
+        try:
+            X = check_array(
+                X,
+                accept_sparse=True,
+                dtype=None,
+                ensure_2d=False,
+                ensure_all_finite=False,
+                allow_nd=True,
+            )
+        except TypeError:
+            X = check_array(
+                X,
+                accept_sparse=True,
+                dtype=None,
+                ensure_2d=False,
+                force_all_finite=False,
+                allow_nd=True,
+            )
 
+        # Choose estimators
         y_route = self.router_.predict(X)
 
-        n_samples, n_estimators = X.shape[0], len(self.estimators_)
-
-        # Determine output shape by getting shape from first estimator.
-        # This handles cases where decision_function may be 1D or 2D.
-        sample = np.unique(y_route)[0]
-        first_estimator = self.estimators_[sample]
-        sample_X = X[y_route == sample][:1]
-        sample_output = getattr(first_estimator, method)(sample_X)
+        # Create prediction matrix
+        n_samples, n_estimators = len(X), len(self.estimators_)
 
         if method == "predict":
             y_pred = np.empty(n_samples, dtype=self.classes_.dtype)
         else:
-            # For predict_proba, predict_log_proba, decision_function.
-            output_shape = (
-                (n_samples,) + sample_output.shape[1:]
-                if sample_output.ndim > 1
-                else (n_samples,)
-            )
+            if self._route_target_type == "binary" and method == "decision_function":
+                output_shape = (n_samples,)
+            else:
+                output_shape = (n_samples, len(self.classes_))
             y_pred = np.zeros(output_shape, dtype=np.float64)
 
         # Ensemble mask if `self.return_earray` is True.
         if self.return_earray:
             ensemble_mask = np.zeros((n_samples, n_estimators), dtype=np.bool_)
 
+        # Predict classes for each chosen estimator
         for estimator_idx in np.unique(y_route):
             estimator_mask = y_route == estimator_idx
             if not np.any(estimator_mask):
