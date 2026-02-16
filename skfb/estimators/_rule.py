@@ -221,6 +221,7 @@ class FallbackRuleClassifier(RuleClassifier, RejectorMixin):
         self.fallback_label = fallback_label
 
     def _fit(self, X, y, sample_weight=None):
+        """Validates inputs if option is True and sets initial attributes."""
         if y is not None and hasattr(self, "classes_"):
             self.fallback_label_ = self.validate_fallback_label(
                 self.fallback_label, self.classes_

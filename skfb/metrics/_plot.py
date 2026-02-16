@@ -25,8 +25,7 @@ def check_matplotlib_support(caller_name):
         sklearn.utils._optional_dependencies.check_matplotlib_support
     """
     try:
-        # pylint: disable=import-outside-toplevel,unused-import
-        import matplotlib
+        import matplotlib  # noqa: F401
     except ImportError as e:
         raise ImportError(
             f"{caller_name} requires matplotlib. You can install matplotlib with "

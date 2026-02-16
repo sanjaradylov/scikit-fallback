@@ -138,7 +138,7 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
                         classes is None or np.array_equal(classes, estimator.classes_)
                     ):
                         warnings.warn(
-                            f"Estimators {i} and {i-1} predict different classes; "
+                            f"Estimators {i} and {i - 1} predict different classes; "
                             f"please, run cascade's `fit` method to train all "
                             f"estimators.",
                             category=CascadeNotFittedWarning,
@@ -237,9 +237,7 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         else:
             y_pred = np.take(self.classes_, y_score >= 0)
 
-        return (
-            earray(y_pred, y_score.ensemble_mask) if self.return_earray else y_pred
-        )
+        return earray(y_pred, y_score.ensemble_mask) if self.return_earray else y_pred
 
     @validate_params(
         {
@@ -373,9 +371,9 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
         if isinstance(thresholds, float):
             self.thresholds_ = [thresholds] * (len(self.estimators) - 1)
         else:
-            assert (
-                len(thresholds) >= len(self.estimators) - 1
-            ), "thresholds must be provided for at least all but the last estimator"
+            assert len(thresholds) >= len(self.estimators) - 1, (
+                "thresholds must be provided for at least all but the last estimator"
+            )
 
             self.thresholds_ = list(thresholds)
 
@@ -679,7 +677,11 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
     _parameter_constraints = {
         "estimators": ["array-like"],
         "costs": ["array-like"],
-        "cv_thresholds": ["array-like", Interval(Real, None, None, closed="neither"), None],
+        "cv_thresholds": [
+            "array-like",
+            Interval(Real, None, None, closed="neither"),
+            None,
+        ],
         "cv": ["cv_object"],
         "scoring": [callable, StrOptions(set(get_scorer_names())), None],
         "min_score": [Interval(Real, None, None, closed="neither"), None],

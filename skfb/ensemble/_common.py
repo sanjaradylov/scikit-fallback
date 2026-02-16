@@ -2,7 +2,6 @@
 
 import inspect
 
-import numpy as np
 
 from sklearn.base import clone
 

@@ -5,7 +5,6 @@ import numpy as np
 from sklearn.base import BaseEstimator, ClassifierMixin, check_array, check_is_fitted
 from sklearn.model_selection import check_cv
 from sklearn.utils.multiclass import type_of_target, unique_labels
-from sklearn.utils.validation import check_array
 
 try:
     from sklearn.utils.parallel import delayed, Parallel
@@ -172,7 +171,12 @@ class RoutingClassifier(BaseEstimator, ClassifierMixin):
             # Get probability predictions from each estimator
             probas = Parallel(n_jobs=self.n_jobs)(
                 delayed(fit_and_predict_one_on_test)(
-                    estimator, X_train, y_train, sw_train, X_test, "predict_proba",
+                    estimator,
+                    X_train,
+                    y_train,
+                    sw_train,
+                    X_test,
+                    "predict_proba",
                 )
                 for estimator in self.estimators
             )

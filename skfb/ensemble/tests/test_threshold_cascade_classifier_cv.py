@@ -91,7 +91,7 @@ class TestThresholdCascadeClassifierCV:
 
         assert len(cascade.best_thresholds_) == len(cascade.estimators_) - 1
         assert len(cascade.thresholds_) == len(cascade.estimators_)
-        assert len(cascade.all_cv_thresholds_) == cascade.cv_.n_splits ** 2
+        assert len(cascade.all_cv_thresholds_) == cascade.cv_.n_splits**2
         assert len(cascade.mean_cv_scores_) == len(cascade.all_cv_thresholds_)
         assert len(cascade.mean_cv_costs_) == len(cascade.all_cv_thresholds_)
 

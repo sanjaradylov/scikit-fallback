@@ -205,10 +205,12 @@ class TestRoutingClassifierCollectTargetLabels:
 
         # Both estimators correct (lower cost should be chosen).
         # y_proba shape: (n_estimators, n_samples, n_classes)
-        y_proba = np.array([
-            [[1.0, 0.0], [0.0, 1.0], [1.0, 0.0]],  # Estimator 0 (cost=1.0)
-            [[1.0, 0.0], [0.0, 1.0], [1.0, 0.0]],  # Estimator 1 (cost=2.0)
-        ])
+        y_proba = np.array(
+            [
+                [[1.0, 0.0], [0.0, 1.0], [1.0, 0.0]],  # Estimator 0 (cost=1.0)
+                [[1.0, 0.0], [0.0, 1.0], [1.0, 0.0]],  # Estimator 1 (cost=2.0)
+            ]
+        )
         targets = clf._collect_target_labels(y_true, y_proba)
 
         # First estimator should be chosen (lower cost).
@@ -224,14 +226,18 @@ class TestRoutingClassifierCollectTargetLabels:
 
         # Both correct, but first has lower cost
         # y_proba shape: (n_estimators, n_samples, n_classes)
-        y_proba = np.array([
-            [[1.0, 0.0], [0.0, 1.0]],  # Estimator 0 (cost=0.5)
-            [[1.0, 0.0], [0.0, 1.0]],  # Estimator 1 (cost=1.0)
-        ])
+        y_proba = np.array(
+            [
+                [[1.0, 0.0], [0.0, 1.0]],  # Estimator 0 (cost=0.5)
+                [[1.0, 0.0], [0.0, 1.0]],  # Estimator 1 (cost=1.0)
+            ]
+        )
         targets = clf._collect_target_labels(y_true, y_proba)
         np.testing.assert_array_equal(targets, np.array([0, 0]))
 
-    def test_collect_target_labels_prefers_lower_cost_with_equal_loss(self, estimators, router):
+    def test_collect_target_labels_prefers_lower_cost_with_equal_loss(
+        self, estimators, router
+    ):
         """Test that lower cost is preferred when log-losses are equal."""
         y_true = np.array([0, 1])
 
@@ -240,11 +246,12 @@ class TestRoutingClassifierCollectTargetLabels:
 
         # Both have identical probabilities (equal log-loss)
         # y_proba shape: (n_estimators, n_samples, n_classes)
-        y_proba = np.array([
-            [[0.9, 0.1], [0.1, 0.9]],  # Estimator 0 (cost=0.5)
-            [[0.9, 0.1], [0.1, 0.9]],  # Estimator 1 (cost=2.0)
-        ])
+        y_proba = np.array(
+            [
+                [[0.9, 0.1], [0.1, 0.9]],  # Estimator 0 (cost=0.5)
+                [[0.9, 0.1], [0.1, 0.9]],  # Estimator 1 (cost=2.0)
+            ]
+        )
         targets = clf._collect_target_labels(y_true, y_proba)
         # Lower cost should always be selected
         np.testing.assert_array_equal(targets, np.array([0, 0]))
-

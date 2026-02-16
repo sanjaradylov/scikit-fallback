@@ -50,10 +50,7 @@ class RejectorMixin:
 
         if fallback_label in classes:
             warnings.warn(
-                (
-                    f"Fallback label = {fallback_label} is in fitted classes = "
-                    f"{classes}"
-                ),
+                f"Fallback label = {fallback_label} is in fitted classes = {classes}",
                 category=UserWarning,
             )
 
