@@ -20,6 +20,7 @@ from sklearn.utils.validation import check_is_fitted
 import numpy as np
 
 from ..core import array as ska
+from ..core.exceptions import SKFBWarning
 from ..utils._legacy import (
     _fit_context,
     HasMethods,
@@ -51,7 +52,7 @@ class RejectorMixin:
         if fallback_label in classes:
             warnings.warn(
                 f"Fallback label = {fallback_label} is in fitted classes = {classes}",
-                category=UserWarning,
+                category=SKFBWarning,
             )
 
         return fallback_label
@@ -79,6 +80,10 @@ class BaseFallbackClassifier(
     metaclass=abc.ABCMeta,
 ):
     """An ABC for fallback meta-classifiers.
+
+    Upon inheritance, you should reimplement methods `_predict` and
+    `_set_fallback_mask` to make predictions and mask acceptend/rejected inputs,
+    respectively. See, e.g., :class:`~skfb.estimators.ThresholdFallbackCassifier`.
 
     Parameters
     ----------

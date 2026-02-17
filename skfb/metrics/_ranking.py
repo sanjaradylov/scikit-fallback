@@ -12,6 +12,7 @@ from sklearn.utils import check_array
 from sklearn.utils.multiclass import type_of_target
 
 from ..core.array import fbarray
+from ..core.exceptions import SKFBWarning
 from ..utils._legacy import (
     Interval,
     Real,
@@ -131,7 +132,7 @@ def fallback_quality_curve(
             if raise_warning:
                 warnings.warn(
                     f"Raised ValueError('{err.args[0]}'); skipping the threshold",
-                    category=UserWarning,
+                    category=SKFBWarning,
                 )
             fallback_rates.pop()
             continue

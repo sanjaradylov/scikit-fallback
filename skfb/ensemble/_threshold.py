@@ -95,7 +95,7 @@ class ThresholdCascadeClassifier(BaseEstimator, ClassifierMixin):
     Notes
     -----
     If you want to have a fallback option (for the last estimator), consider rejectors
-    from :mode:`skfb.estimators`.
+    from :mod:`skfb.estimators`.
     """
 
     _parameter_constraints = {
@@ -568,9 +568,10 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
     """Cascade of classifiers with Pareto-optimized deferral thresholds.
 
     Optimizes deferral thresholds via cross-validation grid search, identifying
-    non-dominated (Pareto-optimal) threshold configurations that balance accuracy
+    non-dominated (Pareto-optimal) threshold configurations that balance performance
     and computational cost. Users can select thresholds based on performance
-    constraints or cost budgets.
+    constraints or cost budgets (e.g., select the best threshold configuration s.t.
+    it gives at least `min_score` classification score on validation).
 
     During inference, runs the first estimator and if a predicted score is lower
     than ``thresholds[0]``, tries the second, and so on. The last estimator always
@@ -635,34 +636,20 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
 
     Examples
     --------
-    >>> import numpy as np
     >>> from skfb.ensemble import ThresholdCascadeClassifierCV
+    >>> from sklearn.datasets import make_classification
     >>> from sklearn.ensemble import RandomForestClassifier
     >>> from sklearn.linear_model import LogisticRegression
-    >>> X = np.random.rand(100, 4)
-    >>> y = np.random.randint(0, 2, 100)
-    >>> cascade_cv = ThresholdCascadeClassifierCV(
-    ...     [LogisticRegression(random_state=0),
+    >>> X, y = make_classification(
+    ...     n_samples=300, n_features=100, n_redundant=95, class_sep=0.1,
+    ...     random_state=0)
+    >>> cascading = ThresholdCascadeClassifierCV(
+    ...     [LogisticRegression(l1_ratio=1.0, solver="liblinear", random_state=0),
     ...      RandomForestClassifier(random_state=0)],
     ...     costs=[1.0, 5.0],
     ...     cv_thresholds=5,
-    ...     cv=3,
-    ... )
-    >>> cascade_cv.fit(X, y)
-    ThresholdCascadeClassifierCV(...)
-    >>> cascade_cv.predict(X[:5])
-    array([0, 1, 0, 1, 0])
-    >>> # Fit with min accuracy constraint: use cheapest config achieving ≥90%
-    >>> cascade_cv_constrained = ThresholdCascadeClassifierCV(
-    ...     [LogisticRegression(random_state=0),
-    ...      RandomForestClassifier(random_state=0)],
-    ...     costs=[1.0, 5.0],
-    ...     min_score=0.90,
-    ... )
-    >>> cascade_cv_constrained.fit(X, y)
-    ThresholdCascadeClassifierCV(...)
-    >>> cascade_cv_constrained.predict(X[:5])
-    array([0, 1, 0, 1, 0])
+    ...     cv=3).fit(X, y)
+    >>> cascading.best_thresholds_
 
     Notes
     -----
@@ -702,7 +689,7 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
         cv_thresholds=None,
         min_score=None,
         max_cost=None,
-        strategy="min_score",
+        strategy="balanced",
         cv=5,
         scoring="accuracy",
         raise_error=False,
@@ -735,12 +722,15 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
         A configuration is Pareto-optimal if no other configuration achieves both
         strictly higher accuracy AND strictly lower cost.
         """
+        # region Mask thresholds by constraints
         feasible = np.ones(len(self.all_cv_thresholds_), dtype=bool)
         if self.min_score is not None:
             feasible &= self.mean_cv_scores_ >= self.min_score
         if self.max_cost is not None:
             feasible &= self.mean_cv_costs_ <= self.max_cost
+        # endregion
 
+        # region Handle default case
         if not np.any(feasible):
             if self.raise_error:
                 raise CascadeParetoConfigException(
@@ -760,6 +750,8 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
                     ),
                     category=CascadeParetoConfigWarning,
                 )
+        # endregion
+        # region Handle constraints
         else:
             feasible_idx = np.where(feasible)[0]
             feasible_scores = self.mean_cv_scores_[feasible_idx]
@@ -794,6 +786,7 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
                 best_idx = np.argmax(pareto_scores / pareto_costs)
 
             self.best_thresholds_ = self.all_cv_thresholds_[pareto_idx[best_idx]]
+        # endregion
 
     @_fit_context(prefer_skip_nested_validation=False)
     @validate_params(
@@ -943,8 +936,14 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
             self._set_thresholds(thresholds)
             params.pop("thresholds")
 
+            return super().set_params(**params)
+
         elif max_cost != not_given or min_score != not_given:
+            super().set_params(**params)
+
             self._select_best_thresholds()
             self._set_thresholds(self.best_thresholds_)
+
+            return self
 
         return super().set_params(**params)

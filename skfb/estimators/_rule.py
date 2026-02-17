@@ -12,11 +12,12 @@ from sklearn.metrics import accuracy_score
 from sklearn.utils.multiclass import unique_labels
 from sklearn.utils.validation import check_is_fitted
 
+from ..core.exceptions import SKFBWarning
 from ..utils._legacy import _fit_context, validate_params
 from .base import RejectorMixin
 
 
-class RuleClassificationWarning(UserWarning):
+class RuleClassificationWarning(SKFBWarning):
     """Raised if validation of RuleClassifier and its subclasses causes errors."""
 
 

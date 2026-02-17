@@ -51,6 +51,45 @@ class RoutingClassifier(BaseEstimator, ClassifierMixin):
     n_jobs : int, default=None
         Number of jobs to run in parallel for cross-validation.
         If None, use 1.
+    verbose : int or bool, default=0
+        Verbosity of parallel jobs.
+
+    Attributes
+    ----------
+    router_ : object
+        Router trained on estimators' signals.
+    router_class_ratios_ : dict, int -> float
+        Keys are estimator indices and values fraction of accepted samples.
+
+    Examples
+    --------
+    >>> from skfb.ensemble import RoutingClassifier
+    >>> from sklearn.datasets import make_classification
+    >>> from sklearn.linear_model import LogisticRegression
+    >>> from sklearn.naive_bayes import GaussianNB
+    >>> from sklearn.svm import SVC
+    >>> X, y = make_classification(
+    ...     n_samples=300, n_features=100, n_redundant=90, class_sep=0.3,
+    ...     random_state=0)
+    >>> maxent = LogisticRegression(random_state=0)
+    >>> nb = GaussianNB()
+    >>> svm = SVC(kernel="linear", probability=True, random_state=0)
+    >>> router = LogisticRegression(random_state=0)
+    >>> routing = RoutingClassifier(
+    ...     estimators=[maxent, nb, svm],
+    ...     router=router,
+    ...     cv=3,
+    ...     return_earray=True).fit(X, y)
+    >>> routing.router_class_ratios_
+    {np.int64(0): np.float64(0.05),
+     np.int64(1): np.float64(0.8566666666666667),
+     np.int64(2): np.float64(0.09333333333333334)}
+    >>> routing.predict(X[:5])
+    ENDArray([1, 0, 1, 0, 1])
+    >>> routing.set_params(return_earray=False).predict(X[:5])
+    array([1, 0, 1, 0, 1])
+    >>> routing.set_params(return_earray=True).predict(X).acceptance_rates
+    array([0.        , 0.97333333, 0.02666667])
     """
 
     _parameter_constraints = {
@@ -60,6 +99,7 @@ class RoutingClassifier(BaseEstimator, ClassifierMixin):
         "cv": ["cv_object", None],
         "return_earray": ["boolean"],
         "n_jobs": [Interval(Integral, -1, None, closed="left"), None],
+        "verbose": ["verbose"],
     }
 
     def __init__(
@@ -70,6 +110,7 @@ class RoutingClassifier(BaseEstimator, ClassifierMixin):
         cv=None,
         return_earray=False,
         n_jobs=None,
+        verbose=0,
     ):
         self.estimators = estimators
         self.router = router
@@ -77,6 +118,7 @@ class RoutingClassifier(BaseEstimator, ClassifierMixin):
         self.cv = cv
         self.return_earray = return_earray
         self.n_jobs = n_jobs
+        self.verbose = verbose
 
     @_fit_context(prefer_skip_nested_validation=False)
     @validate_params(
@@ -133,7 +175,7 @@ class RoutingClassifier(BaseEstimator, ClassifierMixin):
         self.router_ = fit_one(self.router, X, y_route, sample_weight=sample_weight)
 
         # region Fit final estimators on full data
-        self.estimators_ = Parallel(n_jobs=self.n_jobs)(
+        self.estimators_ = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
             delayed(fit_one)(estimator, X, y, sample_weight)
             for estimator in self.estimators
         )

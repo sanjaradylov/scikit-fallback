@@ -5,6 +5,7 @@ import warnings
 import numpy as np
 
 from ..core import array as ska
+from ..core.exceptions import SKFBWarning
 from ..utils._legacy import validate_params
 
 
@@ -62,7 +63,7 @@ def prediction_quality(
 
     if y_pred[non_rejected_mask].size <= 0:
         if raise_warning:
-            warnings.warn("All examples were rejected; returning nan", UserWarning)
+            warnings.warn("All examples were rejected; returning nan", SKFBWarning)
         return np.nan
 
     return score_func(y_true[non_rejected_mask], y_pred[non_rejected_mask], **kwargs)
