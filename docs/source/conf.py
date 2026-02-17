@@ -8,11 +8,11 @@ sys.path.insert(0, os.path.abspath("../.."))
 
 # region Project information
 project = "scikit-fallback"
-copyright = "2024, Sanjar Ad[yi]lov"  # pylint: disable=redefined-builtin
+copyright = "2024-2026, Sanjar Ad[yi]lov"
 author = "Sanjar Ad[yi]lov"
 
-release = "0.1.1"
-version = "0.1"
+release = "0.2.0"
+version = "0.2"
 # endregion
 
 # region General configuration
@@ -26,7 +26,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "numpydoc",
 ]
-autosummary_generate = True  # Turn on sphinx.ext.autosummary
+autosummary_generate = False
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3/", None),

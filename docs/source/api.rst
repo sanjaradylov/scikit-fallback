@@ -1,12 +1,13 @@
 API Reference
 =============
 
-Three major components of ``scikit-fallback`` are *core*, *estimators*, and *metrics*.
+Four major components of ``scikit-fallback`` are *core*, *ensemble*, *estimators*, and *metrics*.
 
 .. toctree::
    :maxdepth: 2
 
    core
+   ensemble
    estimators
    metrics
 
