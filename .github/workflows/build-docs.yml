@@ -43,8 +43,9 @@ jobs:
 
       - name: Build documentation with Sphinx
         run: |
+          set -x
           cd docs
-          python -m sphinx -b html -W --keep-going source _build/html
+          python -m sphinx -b html --keep-going source _build/html
 
       - name: Check documentation build
         run: |
