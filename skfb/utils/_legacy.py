@@ -56,13 +56,12 @@ dummy_constraints = (
 )
 
 try:
-    # pylint: disable=unused-import
     from sklearn.utils._param_validation import (
-        HasMethods,
-        Integral,
-        Interval,
-        Real,
-        StrOptions,
+        HasMethods,  # noqa: F401
+        Integral,  # noqa: F401
+        Interval,  # noqa: F401
+        Real,  # noqa: F401
+        StrOptions,  # noqa: F401
         validate_params,
     )
 

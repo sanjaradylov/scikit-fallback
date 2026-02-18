@@ -14,23 +14,23 @@ repos:
     -   id: check-toml
     -   id: check-yaml
         args: [--allow-multiple-documents]
-    -   id: end-of-file-fixer
-    -   id: mixed-line-ending
-        args:
-          [
-            --fix=lf,
-          ]
     -   id: name-tests-test
         args:
           [
             --pytest-test-first,
           ]
     -   id: trailing-whitespace
-# 🐍🖤 Formatting python code uncompromisingly.
--   repo: https://github.com/psf/black
-    rev: 24.4.2
+-   repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.1
     hooks:
-    -   id: black
+      - id: ruff-check
+        args: [ --fix ]
+      - id: ruff-format
+# # 🐍🖤 Formatting python code uncompromisingly.
+# -   repo: https://github.com/psf/black
+#     rev: 24.4.2
+#     hooks:
+#     -   id: black
 # 🐍🦥 Enforce docstrings in python code.
 -   repo: https://github.com/econchick/interrogate
     rev: 1.7.0
@@ -43,16 +43,16 @@ repos:
 # 🏘 Local hooks.
 -   repo: local
     hooks:
-    # 🐍❗️ Analyze python code with pylint.
-    -   id: pylint
-        name: pylint
-        entry: pylint
-        language: system
-        types: [python]
-        args:
-          [
-            --rcfile=./pyproject.toml,
-          ]
+    # # 🐍❗️ Analyze python code with pylint.
+    # -   id: pylint
+    #     name: pylint
+    #     entry: pylint
+    #     language: system
+    #     types: [python]
+    #     args:
+    #       [
+    #         --rcfile=./pyproject.toml,
+    #       ]
     # 🐍🧪 Test custom components.
     -   id: pytest
         name: pytest

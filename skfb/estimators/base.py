@@ -15,11 +15,12 @@ from sklearn.metrics import accuracy_score
 
 from sklearn.utils.metaestimators import available_if
 from sklearn.utils.multiclass import unique_labels
-from sklearn.utils.validation import check_X_y, check_is_fitted
+from sklearn.utils.validation import check_is_fitted
 
 import numpy as np
 
 from ..core import array as ska
+from ..core.exceptions import SKFBWarning
 from ..utils._legacy import (
     _fit_context,
     HasMethods,
@@ -36,6 +37,25 @@ class RejectorMixin:
     def _more_tags(self):
         """For now, rejection-based learning is supervised."""
         return {"requires_y": True}
+
+    @staticmethod
+    def validate_fallback_label(fallback_label, classes):
+        """Checks if fallback label is compatible w/ classes from training data.."""
+        try:
+            fallback_label.dtype
+        except AttributeError:
+            fallback_label = np.asarray(
+                fallback_label,
+                dtype=classes.dtype,
+            ).view(np.ndarray)
+
+        if fallback_label in classes:
+            warnings.warn(
+                f"Fallback label = {fallback_label} is in fitted classes = {classes}",
+                category=SKFBWarning,
+            )
+
+        return fallback_label
 
 
 def _estimator_has(attr):
@@ -60,6 +80,10 @@ class BaseFallbackClassifier(
     metaclass=abc.ABCMeta,
 ):
     """An ABC for fallback meta-classifiers.
+
+    Upon inheritance, you should reimplement methods `_predict` and
+    `_set_fallback_mask` to make predictions and mask acceptend/rejected inputs,
+    respectively. See, e.g., :class:`~skfb.estimators.ThresholdFallbackCassifier`.
 
     Parameters
     ----------
@@ -101,29 +125,6 @@ class BaseFallbackClassifier(
         for key, value in fitted_params.items():
             setattr(self, key, value)
 
-    def _validate_fallback_label(self, classes_):
-        """Checks if fallback label is compatible w/ classes from training data.."""
-        fallback_label_ = self.fallback_label
-
-        try:
-            fallback_label_.dtype
-        except AttributeError:
-            fallback_label_ = np.asarray(
-                fallback_label_,
-                dtype=classes_.dtype,
-            ).view(np.ndarray)
-
-        if fallback_label_ in classes_:
-            warnings.warn(
-                (
-                    f"Fallback label = {fallback_label_} is in fitted classes = "
-                    f"{classes_}"
-                ),
-                category=UserWarning,
-            )
-
-        return fallback_label_
-
     def _fit(self, X, y, set_attributes=None, **fit_params):
         """Fits the base estimator."""
         estimator_ = clone(self.estimator)
@@ -164,11 +165,9 @@ class BaseFallbackClassifier(
         self : object
             Returns self.
         """
-        X, y = check_X_y(X, y, accept_sparse=True)
-
         classes_ = unique_labels(y)
 
-        fallback_label_ = self._validate_fallback_label(classes_)
+        fallback_label_ = self.validate_fallback_label(self.fallback_label, classes_)
 
         set_attributes = {"fallback_label_": fallback_label_, "classes_": classes_}
         set_attributes = self._fit(X, y, set_attributes=set_attributes, **fit_params)

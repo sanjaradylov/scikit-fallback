@@ -3,6 +3,7 @@
 __all__ = (
     "fallback_quality_auc_score",
     "fallback_quality_curve",
+    "get_scoring",
     "predict_accept_confusion_matrix",
     "predict_reject_accuracy_score",
     "predict_reject_recall_score",
@@ -13,6 +14,7 @@ __all__ = (
 )
 
 from ._classification import (
+    get_scoring,
     predict_accept_confusion_matrix,
     predict_reject_accuracy_score,
     predict_reject_recall_score,

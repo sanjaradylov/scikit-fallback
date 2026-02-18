@@ -1,6 +1,7 @@
 """Classification metrics w/ a rejection option."""
 
 __all__ = (
+    "get_scoring",
     "predict_accept_confusion_matrix",
     "predict_reject_accuracy_score",
     "predict_reject_recall_score",
@@ -378,89 +379,3 @@ def get_scoring(scoring=None, fallback_label=-1, fallback_mode="store"):
     elif isinstance(scoring, str):
         scoring = get_scorer(scoring)
     return scoring
-
-
-@validate_params(
-    {
-        "y_true": ["array-like"],
-        "y_prob": [ska.FBNDArray, "array-like"],
-        "classes": [None, "array-like"],
-        "as_frame": [bool],
-    },
-    prefer_skip_nested_validation=False,
-)
-def describe_confidences(y_true, y_prob, classes=None, as_frame=False):
-    """Returns min, max, mean, std of correct and incorrect predictions per class.
-
-    Parameters
-    ----------
-    y_true : array-like of shape (n_samples,)
-        True labels.
-    y_prob : array-like of shape (n_samples, n_classes)
-        Predicted probabilities.
-    classes : array-like of shape (n_classes,), default=None
-        Ordered class labels: ``classes[i]`` corresponds to ``y_prob[:, i]``.
-        Defaults to the unique labels from ``y_true``.
-    as_frame : bool, default=False
-        Whether to return pandas DataFrame of results.
-
-    Returns
-    -------
-    dict or pandas.DataFrame
-    """
-    if classes is None:
-        classes = np.unique(y_true)
-
-    confidences = {}
-
-    for i, c in enumerate(classes):
-        class_mask = y_true == c
-        c_prob = y_prob[class_mask]
-        true_mask = c_prob.argmax(axis=1) == i
-
-        max_true_prob = c_prob[true_mask].max(axis=1)
-        if max_true_prob.shape[0] == 0:
-            confidences[c] = [np.nan] * 4
-        else:
-            confidences[c] = [
-                max_true_prob.min(),
-                max_true_prob.max(),
-                max_true_prob.mean(),
-                max_true_prob.std(),
-            ]
-
-        max_false_prob = c_prob[~true_mask].max(axis=1)
-        if max_false_prob.shape[0] == 0:
-            confidences[c].extend([np.nan] * 4)
-        else:
-            confidences[c].extend(
-                [
-                    max_false_prob.min(),
-                    max_false_prob.max(),
-                    max_false_prob.mean(),
-                    max_false_prob.std(),
-                ]
-            )
-
-    if as_frame:
-        try:
-            # pylint: disable=import-outside-toplevel
-            import pandas as pd
-        except ImportError as e:
-            raise ImportError(
-                "`as_frame=True` requires pandas. You can install pandas with "
-                "`pip install pandas`"
-            ) from e
-        columns = [
-            "min_correct",
-            "max_correct",
-            "mean_correct",
-            "std_correct",
-            "min_incorrect",
-            "max_incorrect",
-            "mean_incorrect",
-            "std_incorrect",
-        ]
-        return pd.DataFrame(confidences, index=columns).T
-    else:
-        return confidences

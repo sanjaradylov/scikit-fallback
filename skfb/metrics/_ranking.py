@@ -12,6 +12,7 @@ from sklearn.utils import check_array
 from sklearn.utils.multiclass import type_of_target
 
 from ..core.array import fbarray
+from ..core.exceptions import SKFBWarning
 from ..utils._legacy import (
     Interval,
     Real,
@@ -64,7 +65,7 @@ def fallback_quality_curve(
     score_func : callable, default=sklearn.metrics.accuracy_score
         Scoring function (such as accuracy score) to calculate on accepted
         examples for every fallback threshold.
-    predict_method : {"predict", "predict_proba", "predict_log_proba"},
+    predict_method : {"predict", "predict_proba", "predict_log_proba"}, \
             default="predict"
         Whether ``score_func`` accepts classes, probabilities, or log-probabilities.
     min_fallback_rate : float, default=0.0
@@ -131,7 +132,7 @@ def fallback_quality_curve(
             if raise_warning:
                 warnings.warn(
                     f"Raised ValueError('{err.args[0]}'); skipping the threshold",
-                    category=UserWarning,
+                    category=SKFBWarning,
                 )
             fallback_rates.pop()
             continue
