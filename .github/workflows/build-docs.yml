@@ -1,0 +1,87 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "skfb/**"
+      - "pyproject.toml"
+      - "setup.py"
+      - ".github/workflows/build-docs.yml"
+
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "skfb/**"
+      - "pyproject.toml"
+      - "setup.py"
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    name: Build HTML Documentation
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Install documentation dependencies
+        run: |
+          python -m pip install -r docs/requirements.txt
+
+      - name: Build documentation with Sphinx
+        run: |
+          cd docs
+          python -m sphinx -b html -W --keep-going source _build/html
+
+      - name: Check documentation build
+        run: |
+          if [ ! -f "docs/_build/html/index.html" ]; then
+            echo "Error: index.html not found in build output"
+            exit 1
+          fi
+          echo "✅ Documentation built successfully"
+
+      - name: Upload documentation artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-html
+          path: docs/_build/html/
+          retention-days: 30
+
+      - name: Comment PR with build result
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const artifactUrl = `${context.payload.pull_request.html_url}/checks`;
+            const message = '✅ Documentation built successfully! View the [build artifact](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for the HTML output.';
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            });
+
+      - name: Trigger ReadTheDocs build
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && success()
+        run: |
+          curl -X POST \
+            https://readthedocs.org/api/v3/projects/scikit-fallback/builds/ \
+            -H "Authorization: Token ${{ secrets.READTHEDOCS_API_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"branch": "main"}'

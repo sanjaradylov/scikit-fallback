@@ -3,6 +3,7 @@
 ![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)
 [![CodeFactor](https://www.codefactor.io/repository/github/sanjaradylov/scikit-fallback/badge)](https://www.codefactor.io/repository/github/sanjaradylov/scikit-fallback)
 ![Python package workflow](https://github.com/sanjaradylov/scikit-fallback/actions/workflows/python-package.yml/badge.svg)
+[![Docs](https://github.com/sanjaradylov/scikit-fallback/actions/workflows/build-docs.yml/badge.svg)](https://github.com/sanjaradylov/scikit-fallback/actions/workflows/build-docs.yml)
 [![PythonVersion](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/downloads/release/python-3913/)
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
@@ -140,7 +141,7 @@ array([0.659, 0.003, 0.338])
 
 # 🏗 Installation
 `scikit-fallback` requires:
-* Python (>= 3.9,< 3.14)
+* Python (>= 3.10,< 3.14)
 * scikit-learn (>=1.0)
 * numpy
 * scipy
