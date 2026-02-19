@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "scikit-fallback"
-description = "Machine learning with a reject option"
+description = "Efficient and reliable machine learning with a reject option and selectiveness"
 license = { file = "LICENSE" }
 classifiers=[
     "Development Status :: 5 - Production/Stable",

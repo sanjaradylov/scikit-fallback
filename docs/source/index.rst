@@ -12,8 +12,8 @@ in high-stakes domains.
    :alt: PyPI Version
    :target: https://pypi.org/project/scikit-fallback/
 
-.. image:: https://img.shields.io/badge/Python-3.9+-2E86AB?logo=python&logoColor=white
-   :alt: Python 3.9+
+.. image:: https://img.shields.io/badge/Python-3.10+-2E86AB?logo=python&logoColor=white
+   :alt: Python 3.10+
    :target: https://www.python.org/downloads/
 
 .. image:: https://img.shields.io/badge/scikit--learn-Compatible-F7931E?logo=scikit-learn&logoColor=white
@@ -31,6 +31,9 @@ in high-stakes domains.
    :alt: Downloads
    :target: https://pepy.tech/project/scikit-fallback
 
+.. image:: https://www.codefactor.io/repository/github/sanjaradylov/scikit-fallback/badge
+   :alt: CodeFactor
+   :target: https://www.codefactor.io/repository/github/sanjaradylov/scikit-fallback
 
 Why Fallbacks? 🤔
 -----------------

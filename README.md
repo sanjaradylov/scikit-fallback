@@ -1,10 +1,10 @@
-![PyPi](https://img.shields.io/pypi/v/scikit-fallback)
+[![PyPi](https://img.shields.io/pypi/v/scikit-fallback)](https://pypi.org/project/scikit-fallback/)
 [![Downloads](https://static.pepy.tech/badge/scikit-fallback)](https://pepy.tech/project/scikit-fallback)
 ![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)
 [![CodeFactor](https://www.codefactor.io/repository/github/sanjaradylov/scikit-fallback/badge)](https://www.codefactor.io/repository/github/sanjaradylov/scikit-fallback)
 ![Python package workflow](https://github.com/sanjaradylov/scikit-fallback/actions/workflows/python-package.yml/badge.svg)
 [![Docs](https://github.com/sanjaradylov/scikit-fallback/actions/workflows/build-docs.yml/badge.svg)](https://github.com/sanjaradylov/scikit-fallback/actions/workflows/build-docs.yml)
-[![PythonVersion](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/downloads/release/python-3913/)
+[![PythonVersion](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue)](https://www.python.org/downloads/release/python-3913/)
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Twitter](https://img.shields.io/twitter/url?style=social&url=https%3A%2F%2Fgithub.com%2Fsanjaradylov%2Fscikit-fallback)](https://x.com/intent/tweet?text=Wow:%20https%3A%2F%2Fgithub.com%2Fsanjaradylov%2Fscikit-fallback%20@sanjaradylov)
@@ -27,8 +27,13 @@ such as [`predict_reject_recall_score`](https://scikit-fallback.readthedocs.io/e
 or visualizing distributions of confidence scores with
 [`PairedHistogramDisplay`](https://scikit-fallback.readthedocs.io/en/latest/metrics.html#skfb.metrics.PairedHistogramDisplay),
 and other tools from [`skfb.metrics`](https://scikit-fallback.readthedocs.io/en/latest/metrics.html#).<br>
-🎶 Combine your costly ensembles with `RoutingClassifier` or in
-`ThresholdCascadeClassifierCV` and other `skfb.ensemble` meta-estimators to streamline
+🎶 Combine your costly ensembles with
+[`RoutingClassifier`](https://scikit-fallback.readthedocs.io/en/latest/ensemble.html#skfb.ensemble.RoutingClassifier)
+or in
+[`ThresholdCascadeClassifierCV`](https://scikit-fallback.readthedocs.io/en/latest/ensemble.html#skfb.ensemble.ThresholdCascadeClassifierCV)
+and other
+[`skfb.ensemble`](https://scikit-fallback.readthedocs.io/en/latest/ensemble.html#)
+meta-estimators to streamline
 inference while elevating model performance.<br>
 📒See [documentation](https://scikit-fallback.readthedocs.io/en/latest/index.html),
 [tutorials](https://medium.com/@sshadylov), and [examples](./examples/) for more details and motivation.
@@ -95,14 +100,17 @@ more examples of rejection meta-estimators and
 [Combined Metrics](https://scikit-fallback.readthedocs.io/en/latest/metrics.html)
 for evaluation and inspection tools.
 
-## Ensembling
+## Dynamic Ensembling
 
 While common ensembling methods such as voting and stacking aim to boost predictive performance,
 they also increase inference costs as a result of output aggregations. Alternatively, we could
 learn to choose which individual model or subset of models in an ensemble should make a
-decision.
+decision, thereby reducing inference overhead while bargaining, or sometimes even
+improving, predictive performance.
 
-For example, `skfb.ensemble.ThresholdCascadeClassifierCV` builds a *cascade* from a sequence of
+For example,
+[`skfb.ensemble.ThresholdCascadeClassifierCV`](https://scikit-fallback.readthedocs.io/en/latest/ensemble.html#skfb.ensemble.ThresholdCascadeClassifierCV)
+builds a *cascade* from a sequence of
 models arranged by their inference costs (and basically, by their performance - e.g., from
 weakest but fastest to strongest but slowest) and learns confidence thresholds that determine
 whether the current model in the sequence makes a prediction or defers to the next model
@@ -141,7 +149,7 @@ array([0.659, 0.003, 0.338])
 
 # 🏗 Installation
 `scikit-fallback` requires:
-* Python (>= 3.10,< 3.14)
+* Python (>= 3.9,< 3.14)
 * scikit-learn (>=1.0)
 * numpy
 * scipy
@@ -153,6 +161,12 @@ and along with the requirements can be installed via `pip` :
 pip install scikit-fallback
 ```
 
+---
+
+**Note:** when using *Python 3.9 w/ scikit-learn>=1.7*, subclassing of `BaseEstimator` and
+scikit-learn mixins might result in runtime errors related to `__sklearn_tags__`. Also,
+if you have *scikit-learn<=1.2*, you will see warnings about the unavailability of nested
+or general parameter validation, which *you can ignore*.
 
 # 🔗 Links
 

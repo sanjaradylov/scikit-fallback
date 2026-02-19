@@ -552,14 +552,22 @@ def _scoring_path(
     costs,
     X,
     y,
+    sample_weight,
     scoring,
+    scoring_response_method,
 ):
     """Trains cascade and scores with accuracy metric."""
-    y_pred = cascade.set_params(thresholds=thresholds).predict(X)
-    if hasattr(scoring, "_score_func"):
-        score = scoring._score_func(y, y_pred)
-    else:
-        score = scoring(y, y_pred)
+    predictor = getattr(
+        cascade.set_params(thresholds=thresholds),
+        scoring_response_method,
+    )
+    y_pred = predictor(X)
+    try:
+        # NOTE: Some scorers accept the full (n_samples, n_classes) predictions, but
+        score = scoring._score_func(y, y_pred, sample_weight=sample_weight)
+    except ValueError:
+        #       others (e.g., `roc_auc_score` for binary classification) only n_samples.
+        score = scoring._score_func(y, y_pred[:, 1], sample_weight=sample_weight)
     cost = y_pred.acceptance_rates @ costs
     return score, cost
 
@@ -582,9 +590,10 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
     estimators : array-like of object, length n_estimators
         Base estimators. Preferably ordered from weakest (fast, low-accuracy) to
         strongest (slow, high-accuracy).
-    costs : array-like of shape (n_estimators,)
+    costs : array-like of shape (n_estimators,) or float, default=None
         Computational cost per estimator. Used to identify non-dominated
-        threshold configurations along the accuracy-cost tradeoff.
+        threshold configurations along the cost-performance tradeoff. Defaults to
+        uniform costs summing to 1.0.
     cv_thresholds : array-like of shape (n_thresholds,) or int, default=None
         Candidate deferral thresholds for grid search. If None, defaults to 10
         thresholds linearly spaced from 1/n_classes to 0.95. If int, generates
@@ -616,12 +625,16 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
     return_earray : bool, default=True
         Whether to return :class:`~skfb.core.ENDArray` with ensemble mask
         or plain numpy ndarray.
-    prefit : bool, default=False
-        If True, estimators are assumed fitted; skips training in ``fit()``.
     n_jobs : int, default=None
-        Parallel jobs for CV grid search. -1 uses all processors.
+        Parallel jobs:
+
+        - 1) model pre-training for each CV fold;
+        - 2) score and cost evaluation for each fold and threshold configuration;
+        - 3) and retraining on full data.
+
+        -1 uses all processors. Defaults to one.
     verbose : int, default=0
-        Verbosity level.
+        Verbosity level for each stage of training.
 
     Attributes
     ----------
@@ -663,7 +676,7 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
 
     _parameter_constraints = {
         "estimators": ["array-like"],
-        "costs": ["array-like"],
+        "costs": ["array-like", Interval(Real, 0, None, closed="neither"), None],
         "cv_thresholds": [
             "array-like",
             Interval(Real, None, None, closed="neither"),
@@ -677,7 +690,6 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
         "raise_error": ["boolean"],
         "response_method": [StrOptions({"decision_function", "predict_proba"})],
         "return_earray": ["boolean"],
-        "prefit": ["boolean"],
         "n_jobs": [Interval(Integral, -1, None, closed="left"), None],
         "verbose": ["verbose"],
     }
@@ -685,7 +697,7 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
     def __init__(
         self,
         estimators,
-        costs,
+        costs=None,
         cv_thresholds=None,
         min_score=None,
         max_cost=None,
@@ -817,7 +829,9 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
         self.classes_ = unique_labels(y)
 
         # region Process costs
-        if isinstance(self.costs, (tuple, int)):
+        if self.costs is None:
+            self.costs_ = np.array([1.0 / len(self.estimators)] * len(self.estimators))
+        elif isinstance(self.costs, (float, int)):
             self.costs_ = np.array([self.costs] * len(self.estimators))
         else:
             self.costs_ = np.asarray(self.costs)
@@ -838,6 +852,18 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
         # region Setup cross-validation and scorer
         self.cv_ = check_cv(self.cv, y=y, classifier=True)
         self.scoring_ = get_scorer(self.scoring)
+        try:
+            response_methods = self.scoring_._response_method
+            if isinstance(response_methods, (list, tuple)):
+                self._scoring_response_method = response_methods[-1]
+            else:
+                self._scoring_response_method = response_methods
+        except AttributeError:
+            raise ValueError(
+                f"`scoring` should be either scikit-learn scorer name like 'accuracy' "
+                f"or custom scorer wrapped with `sklearn.metrics.make_scorer`, "
+                f"not {self.scoring}."
+            )
         # endregion
 
         # region Generate all threshold combinations
@@ -881,7 +907,13 @@ class ThresholdCascadeClassifierCV(ThresholdCascadeClassifier):
                 self.costs_,
                 np.take(X, test_idx, axis=0),
                 np.take(y, test_idx, axis=0),
+                (
+                    np.take(sample_weight, test_idx, axis=0)
+                    if sample_weight is not None
+                    else None
+                ),
                 self.scoring_,
+                self._scoring_response_method,
             )
             for thresholds in self.all_cv_thresholds_
             for cascade, (_, test_idx) in zip(cascades, self.cv_.split(X, y))
