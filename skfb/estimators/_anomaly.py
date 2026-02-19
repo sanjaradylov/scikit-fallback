@@ -14,6 +14,11 @@ from .base import BaseFallbackClassifier, _estimator_has
 class AnomalyFallbackClassifier(BaseFallbackClassifier):
     """A fallback classifier based on provided anomaly detector.
 
+    Augments `estimator` behavior with a reject option based on outlier detection.
+    If `outlier_detector` predicts -1 for a given input, then returns, masks, or
+    ignores rejections depending on `fallback_mode`. Otherwise, accepts the input
+    and makes predictions.
+
     Parameters
     ----------
     estimator : object
@@ -31,6 +36,13 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
         * (``"return"``) a numpy ndarray of both predictions and fallbacks;
         * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
         * (``"ignore"``) a numpy ndarray of only estimator's predictions.
+
+    Attributes
+    ----------
+    estimator_ : object
+        Trained base estimator.
+    outlier_detector_ : object
+        Trained outlier detector.
 
     Examples
     --------
@@ -88,7 +100,9 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
             check_is_fitted(self.estimator, "classes_")
             check_is_fitted(self.outlier_detector)
 
-            fallback_label_ = self._validate_fallback_label(self.estimator.classes_)
+            fallback_label_ = self.validate_fallback_label(
+                self.fallback_label, self.estimator.classes_
+            )
             fitted_params = {
                 "estimator_": self.estimator,
                 "outlier_detector_": self.outlier_detector,

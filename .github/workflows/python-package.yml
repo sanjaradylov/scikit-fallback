@@ -1,6 +1,6 @@
 # Install package and run pre-commit hooks.
 
-name: Python package
+name: Package
 
 on:
   push:
@@ -14,20 +14,38 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
-        sklearn-version: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5"]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        sklearn-version: ["1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7", "1.8"]
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }} and scikit-learn ${{ matrix.sklearn-version }}
       uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
+
+    - name: Check compatibility
+      id: check_compat
+      run: |
+        # TODO: Incompatible combinations
+        if [[ ("${{ matrix.python-version }}" == "3.10" && "${{ matrix.sklearn-version }}" == "1.8") ]]; then
+          echo "skip=true" >> $GITHUB_OUTPUT
+        else
+          echo "skip=false" >> $GITHUB_OUTPUT
+        fi
+
     - name: Install dependencies
+      if: steps.check_compat.outputs.skip == 'false'
       run: |
         python -m pip install --upgrade pip
         python -m pip install scikit-learn~=${{ matrix.sklearn-version }}
         python -m pip install -e .
+
     - name: Run pre-commit hooks
+      if: steps.check_compat.outputs.skip == 'false'
       run: |
         python -m pip install -e .[tests]
         pre-commit run --all-files
+
+    - name: Skip incompatible combination
+      if: steps.check_compat.outputs.skip == 'true'
+      run: echo "Skipped incompatible Python/scikit-learn combination."

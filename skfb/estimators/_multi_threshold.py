@@ -164,11 +164,17 @@ def multi_threshold_predict_or_fallback(
 class MultiThresholdFallbackClassifier(BaseFallbackClassifier):
     """A fallback classifier based on local thresholds.
 
+    Augments `estimator` behavior with a reject option based on confidence thresholds.
+    If `estimator`'s max probability for a given input is lower than the corresponding
+    class `threshold`, or if the difference between top two probabilities are lower than
+    `ambiguity_threshold`, the input is marked as rejected.
+    Depending on `fallback_mode`, predicts, masks, or ignores rejections.
+
     Parameters
     ----------
     estimator : object
         The best estimator making decisions w/o fallbacks.
-    thresholds : dict-like
+    thresholds : array-like, shape (n_classes,)
         Mapping from class labels to local fallback thresholds.
     ambiguity_threshold : float, default=0.0
         Predictions w/ the close top 2 scores are rejected.
@@ -231,7 +237,9 @@ class MultiThresholdFallbackClassifier(BaseFallbackClassifier):
         #       But this seems to be the best way to prevent refitting.
         try:
             check_is_fitted(self.estimator, "classes_")
-            fallback_label_ = self._validate_fallback_label(self.estimator.classes_)
+            fallback_label_ = self.validate_fallback_label(
+                self.fallback_label, self.estimator.classes_
+            )
             fitted_params = {
                 "estimator_": self.estimator,
                 "classes_": self.estimator.classes_,

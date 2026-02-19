@@ -113,12 +113,43 @@ class FBNDArray(np.ndarray):
 
 
 def fbarray(predictions, fallback_mask=None):
-    """Creates an ndarray of predictions that also stores fallback information."""
+    """Creates an ndarray of predictions that also stores fallback information.
+
+    FBNDArrays are usually returned by ``predict``, ``predict_proba``, or
+    ``predict_log_proba`` methods of fallback meta-estimators.
+
+    Parameters
+    ----------
+    predictions : array-like of shape (n_samples,)
+        An array of base-estimator predictions.
+    fallback_mask : array-like of shape (n_samples,) or (1, n_samples), or None
+        Array mask indicating whether i-th sample was rejected by a
+        fallback meta-estimator. Defaults to an empty matrix.
+        Further stored as a sparse array by the ``fallback_mask`` property.
+
+    Returns
+    -------
+    FBNDArray
+        Same as numpy ndarray but stores also additional fallback information.
+    """
     return FBNDArray(predictions, fallback_mask=fallback_mask)
 
 
 class ENDArray(np.ndarray):
-    """Numpy ndarray storing masks of predicted samples per estimator."""
+    """Numpy ndarray storing masks of predicted samples per estimator.
+
+    ENDArrays are usually returned by ``predict``, ``predict_proba``, or
+    ``predict_log_proba`` methods of ensemble meta-estimators.
+
+    Parameters
+    ----------
+    predictions : array-like of shape (n_samples,)
+        An array of base-estimator predictions.
+    ensemble_mask : array-like of shape (n_samples, n_estimators), or None
+        Array mask indicating which estimator decided to make a prediction on the i-th sample
+        Defaults to an empty matrix. Further stored as a sparse array by the
+        ``ensemble_mask`` property.
+    """
 
     def __new__(cls, predictions, ensemble_mask=None):
         obj = np.asarray(predictions).view(cls)
@@ -157,8 +188,8 @@ class ENDArray(np.ndarray):
         return self._ensemble_mask
 
     @property
-    def deferral_rate(self):
-        """Returns an ndarray of ratios of deferred samples per estimator."""
+    def acceptance_rates(self):
+        """Returns an ndarray of ratios of accepted samples per estimator."""
         return self.ensemble_mask.toarray().mean(axis=0)
 
 

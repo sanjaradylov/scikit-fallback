@@ -1,7 +1,7 @@
 """Enables :class:`~skfb.estimators.MultiThresholdFallbackClassifierCV`.
 
-    >>> from skfb.experimental import enable_multi_threshold_fallback_classifier_cv
-    >>> from skfb.estimators import MultiThresholdFallbackClassifierCV
+>>> from skfb.experimental import enable_multi_threshold_fallback_classifier_cv
+>>> from skfb.estimators import MultiThresholdFallbackClassifierCV
 """
 
 from .. import estimators

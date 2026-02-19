@@ -125,6 +125,12 @@ def predict_or_fallback(
 class ThresholdFallbackClassifier(BaseFallbackClassifier):
     """A fallback classifier based on provided certainty threshold.
 
+    Augments `estimator` behavior with a reject option based on confidence thresholds.
+    If `estimator`'s max probability for a given input is lower than `threshold`,
+    or if the difference between top two probabilities are lower than
+    `ambiguity_threshold`, the input is marked as rejected.
+    Depending on `fallback_mode`, predicts, masks, or ignores rejections.
+
     Parameters
     ----------
     estimator : object
@@ -193,7 +199,9 @@ class ThresholdFallbackClassifier(BaseFallbackClassifier):
         #       But this seems to be the best way to prevent refitting.
         try:
             check_is_fitted(self.estimator, "classes_")
-            fallback_label_ = self._validate_fallback_label(self.estimator.classes_)
+            fallback_label_ = self.validate_fallback_label(
+                self.fallback_label, self.estimator.classes_
+            )
             fitted_params = {
                 "estimator_": self.estimator,
                 "classes_": self.estimator.classes_,
@@ -251,6 +259,12 @@ _N_THRESHOLDS = 10
 class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
     """A fallback classifier based on the best certainty threshold learnt via CV.
 
+    Augments `estimator` behavior with a reject option based on confidence thresholds.
+    If `estimator`'s max probability for a given input is lower than learned threshold,
+    or if the difference between top two probabilities are lower than
+    `ambiguity_threshold`, the input is marked as rejected.
+    Depending on `fallback_mode`, predicts, masks, or ignores rejections.
+
     Parameters
     ----------
     estimator : object
@@ -288,6 +302,15 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
         * (``"return"``) a numpy ndarray of both predictions and fallbacks;
         * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
         * (``"ignore"``) a numpy ndarray of only estimator's predictions.
+
+    Attributes
+    ----------
+    threshold_ : float
+        Learned fallback threshold.
+    best_score_ : float
+        Best CV score.
+    cv_scores_ : ndarray, shape (n_thresholds, n_splits)
+        Trace of CV evaluations.
 
     Examples
     --------
