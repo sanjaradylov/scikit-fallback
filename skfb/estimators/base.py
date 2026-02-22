@@ -81,9 +81,9 @@ class BaseFallbackClassifier(
 ):
     """An ABC for fallback meta-classifiers.
 
-    Upon inheritance, you should reimplement methods `_predict` and
-    `_set_fallback_mask` to make predictions and mask acceptend/rejected inputs,
-    respectively. See, e.g., :class:`~skfb.estimators.ThresholdFallbackCassifier`.
+    Upon inheritance, you should reimplement methods ``_predict`` and
+    ``_set_fallback_mask`` to make predictions and mask accepted/rejected inputs,
+    respectively. See, e.g., :class:`~skfb.estimators.ThresholdFallbackClassifier`.
 
     Parameters
     ----------
@@ -93,11 +93,15 @@ class BaseFallbackClassifier(
         The label of a rejected example.
         Should be compatible w/ the class labels from training data.
     fallback_mode : {"return", "store", "ignore"}, default="store"
-        While predicting, whether to return:
+        While predicting w/ the `predict` method, whether to return:
 
         * (``"return"``) a numpy ndarray of both predictions and fallbacks;
-        * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
+        * (``"store"``)  an ``FBNDArray`` of predictions storing also fallback mask;
         * (``"ignore"``) a numpy ndarray of only estimator's predictions.
+
+        Calling ``decision_function`` or ``predict_proba`` is equivalent to
+        ``estimator``'s corresponding calls except that with ``"store"``, ``FBNDArray``
+        is returned.
     """
 
     _parameter_constraints = {
@@ -333,15 +337,18 @@ class BaseFallbackClassifier(
         Returns
         -------
         score : float
-            Depending on ``self.fallback_mode``:
+            Depending on ``self.fallback_mode``, calculate:
 
-            * (``"return"``) a numpy ndarray of both predictions and fallbacks;
-            * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
-            * (``"ignore"``) a numpy ndarray of only estimator's predictions.
+            * (``"return"``) accuracy on accepted inputs;
+            * (``"store"``)  :func:`~skfb.metrics.predict_reject_accuracy_score`;
+            * (``"ignore"``) accuracy on all inputs.
 
         See also
         --------
-        skfb.metrics.predict_reject_accuracy_score
+        skfb.metrics.predict_reject_accuracy_score : Combined, prediction-rejection
+            accuracy score.
+        skfb.metrics.predict_reject_recall_score : Combined, prediction-rejection
+            balanced accuracy score.
         """
         # ??? Is it the right way to overcome circular imports?
         # pylint: disable=import-outside-toplevel
