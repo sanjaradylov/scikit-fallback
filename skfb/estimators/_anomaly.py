@@ -8,15 +8,16 @@ from sklearn.utils.validation import check_is_fitted, NotFittedError
 
 from ..core import array as ska
 from ..utils._legacy import HasMethods, validate_params
+from ..utils._validation import check_X_y_sample_weight
 from .base import BaseFallbackClassifier, _estimator_has
 
 
 class AnomalyFallbackClassifier(BaseFallbackClassifier):
     """A fallback classifier based on provided anomaly detector.
 
-    Augments `estimator` behavior with a reject option based on outlier detection.
-    If `outlier_detector` predicts -1 for a given input, then returns, masks, or
-    ignores rejections depending on `fallback_mode`. Otherwise, accepts the input
+    Augments ``estimator`` behavior with a reject option based on outlier detection.
+    If ``outlier_detector`` predicts -1 for a given input, then returns, masks, or
+    ignores rejections depending on ``fallback_mode``. Otherwise, accepts the input
     and makes predictions.
 
     Parameters
@@ -31,11 +32,15 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
         The label of a rejected example.
         Should be compatible w/ the class labels from training data.
     fallback_mode : {"return", "store", "ignore"}, default="store"
-        While predicting, whether to return:
+        While predicting w/ the ``predict`` method, whether to return:
 
         * (``"return"``) a numpy ndarray of both predictions and fallbacks;
-        * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
+        * (``"store"``)  an ``FBNDArray`` of predictions storing also fallback mask;
         * (``"ignore"``) a numpy ndarray of only estimator's predictions.
+
+        Calling ``decision_function`` or ``predict_proba`` is equivalent to
+        ``estimator``'s corresponding calls except that with ``"store"``, ``FBNDArray``
+        is returned.
 
     Attributes
     ----------
@@ -128,7 +133,16 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
         self : object
             Returns self.
         """
-        self.outlier_detector.fit(X, y, **fit_params)
+        sample_weight = fit_params.pop("sample_weight", None)
+        X, y, sample_weight = check_X_y_sample_weight(
+            X, y=y, sample_weight=sample_weight
+        )
+
+        if sample_weight is not None:
+            self.outlier_detector.fit(X, y=y, sample_weight=sample_weight, **fit_params)
+        else:
+            self.outlier_detector.fit(X, y=y, **fit_params)
+
         self._set_fitted_attributes(
             {
                 "outlier_detector_": self.outlier_detector,
@@ -138,9 +152,13 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
 
         if self.remove_outliers:
             acceptance_mask = self.outlier_detector_.predict(X) == 1
-            X_in = X[acceptance_mask]
-            y_in = y[acceptance_mask]
-            return super().fit(X_in, y_in, **fit_params)
+            X = X[acceptance_mask]
+            y = y[acceptance_mask]
+            if sample_weight is not None:
+                sample_weight = sample_weight[acceptance_mask]
+
+        if sample_weight is not None:
+            return super().fit(X, y, sample_weight=sample_weight, **fit_params)
         else:
             return super().fit(X, y, **fit_params)
 
@@ -150,6 +168,8 @@ class AnomalyFallbackClassifier(BaseFallbackClassifier):
         Returns both fallbacks and classes if ``self.fallback_mode == 'return'``,
         or classes w/ fallback mask if ``self.fallback_mode == 'store'``.
         """
+        X, _, _ = check_X_y_sample_weight(X)
+
         y_out = self.outlier_detector_.predict(X)
         fallback_mask = y_out == -1
 

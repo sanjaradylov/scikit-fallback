@@ -15,7 +15,7 @@ except ModuleNotFoundError:
     from sklearn.utils.fixes import delayed
 
     warnings.warn(
-        "Using ``joblib.Parallel`` for ``TresholdFallbackClassifierCV`` and "
+        "Using ``joblib.Parallel`` for ``ThresholdFallbackClassifierCV`` and "
         "``RateFallbackClassifierCV`` instead of ``sklearn.utils.parallel.Parallel``, "
         "which was added in sklearn 1.3.",
         category=ImportWarning,
@@ -36,6 +36,7 @@ from ..utils._legacy import (
     StrOptions,
     validate_params,
 )
+from ..utils._validation import check_X_y_sample_weight
 
 
 def _top_2(scores):
@@ -94,7 +95,7 @@ def predict_or_fallback(
         Whether to have:
 
         * (``"return"``) a numpy ndarray of both predictions and fallbacks;
-        * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
+        * (``"store"``)  an ``FBNDArray`` of predictions storing also fallback mask;
         * (``"ignore"``) a numpy ndarray of only estimator's predictions.
 
     Returns
@@ -123,13 +124,29 @@ def predict_or_fallback(
 
 
 class ThresholdFallbackClassifier(BaseFallbackClassifier):
-    """A fallback classifier based on provided certainty threshold.
+    r"""A fallback classifier based on provided certainty threshold.
 
-    Augments `estimator` behavior with a reject option based on confidence thresholds.
-    If `estimator`'s max probability for a given input is lower than `threshold`,
-    or if the difference between top two probabilities are lower than
-    `ambiguity_threshold`, the input is marked as rejected.
-    Depending on `fallback_mode`, predicts, masks, or ignores rejections.
+    Formally, let :math:`p(x) = [p_1(x),\dots,p_K(x)]` be the class probability vector
+    returned by the wrapped estimator for a sample :math:`x`. A sample is
+    rejected whenever the maximum probability or the difference between top two
+    probabilities are low:
+
+    .. math::
+
+        \max_k p_k(x) < \tau \quad \text{or} \quad
+        \max_k p_k(x) - \text{second\_max}_k p_k(x) < \alpha
+
+    where :math:`\tau` is ``threshold`` and :math:`\alpha` is
+    ``ambiguity_threshold``. The final output is
+
+    .. math::
+
+        y(x) = \begin{cases}
+            \arg\max_k p_k(x) & \text{if accepted},\\
+            \text{fallback\_label} & \text{otherwise}.
+        \end{cases}
+
+    The return format depends on ``fallback_mode``.
 
     Parameters
     ----------
@@ -143,11 +160,15 @@ class ThresholdFallbackClassifier(BaseFallbackClassifier):
         The label of a rejected example.
         Should be compatible w/ the class labels from training data.
     fallback_mode : {"return", "store", "ignore"}, default="store"
-        While predicting, whether to return:
+        While predicting w/ the ``predict`` method, whether to return:
 
         * (``"return"``) a numpy ndarray of both predictions and fallbacks;
-        * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
+        * (``"store"``)  an ``FBNDArray`` of predictions storing also fallback mask;
         * (``"ignore"``) a numpy ndarray of only estimator's predictions.
+
+        Calling ``decision_function`` or ``predict_proba`` is equivalent to
+        ``estimator``'s corresponding calls except that w/ ``"store"``, ``FBNDArray``
+        is returned.
 
     Examples
     --------
@@ -168,6 +189,11 @@ class ThresholdFallbackClassifier(BaseFallbackClassifier):
     1.0
     >>> rejector.set_params(fallback_mode="store").score(X, y)
     0.8333333333333334
+
+    See also
+    --------
+    skfb.estimators.ThresholdFallbackClassifier : Fallback classification based on
+        fixed threshold.
     """
 
     _parameter_constraints = {**BaseFallbackClassifier._parameter_constraints}
@@ -257,13 +283,22 @@ _N_THRESHOLDS = 10
 
 
 class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
-    """A fallback classifier based on the best certainty threshold learnt via CV.
+    r"""A fallback classifier based on the best certainty threshold learnt via CV.
 
-    Augments `estimator` behavior with a reject option based on confidence thresholds.
-    If `estimator`'s max probability for a given input is lower than learned threshold,
-    or if the difference between top two probabilities are lower than
-    `ambiguity_threshold`, the input is marked as rejected.
-    Depending on `fallback_mode`, predicts, masks, or ignores rejections.
+    Training evaluates a candidate set of thresholds :math:`T` by cross-validation.
+    For each threshold :math:`t\in T` and fold, compute the validation score
+    :math:`s_{\text{fold}}(t)` using the supplied ``scoring`` function. The chosen
+    threshold maximizes the mean score:
+
+    .. math::
+
+        t^{\ast} = \arg\max_{t\in T}
+            \frac{1}{n_{\text{folds}}} \sum_{\text{fold}} s_{\text{fold}}(t).
+
+    The selected value is stored in ``threshold_``.
+
+    Predictions then follow the same rule as :class:`ThresholdFallbackClassifier`
+    using ``threshold_``.
 
     Parameters
     ----------
@@ -297,11 +332,15 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
         The label of a rejected example.
         Should be compatible w/ the class labels from training data.
     fallback_mode : {"return", "store", "ignore"}, default="store"
-        While predicting, whether to return:
+        While predicting w/ the ``predict`` method, whether to return:
 
         * (``"return"``) a numpy ndarray of both predictions and fallbacks;
-        * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
+        * (``"store"``)  an ``FBNDArray`` of predictions storing also fallback mask;
         * (``"ignore"``) a numpy ndarray of only estimator's predictions.
+
+        Calling ``decision_function`` or ``predict_proba`` is equivalent to
+        ``estimator``'s corresponding calls except that with ``"store"``, ``FBNDArray``
+        is returned.
 
     Attributes
     ----------
@@ -476,29 +515,46 @@ class ThresholdFallbackClassifierCV(ThresholdFallbackClassifier):
         )
 
 
-def _find_threshold(estimator, X_train, X_test, y_train, fallback_rate):
+def _find_threshold(estimator, X_train, X_test, y_train, sw_train, fallback_rate):
     """Finds threshold t s.t. P(estimator(X_test) < t) = fallback_rate."""
-    y_prob = estimator.fit(X_train, y_train).predict_proba(X_test).max(axis=1)
+    if sw_train is None:
+        estimator.fit(X_train, y_train)
+    else:
+        estimator.fit(X_train, y_train, sample_weight=sw_train)
+    y_prob = estimator.predict_proba(X_test).max(axis=1)
     return np.quantile(y_prob, fallback_rate)
 
 
 class RateFallbackClassifierCV(BaseFallbackClassifier):
-    """Fallback classifier learning a threshold based on the provided fallback rate.
+    r"""Fallback classifier learning a threshold based on the desired fallback rate.
 
-    The threshold is determined during training via cross-validation and equals to the
-    mean fallback-rate quantile of the predictions on the validation sets.
-    Then predictions w/ probabilities lower than the learned threshold are rejected.
+    Let :math:`r` denote the requested fallback rate. For each cross-validation
+    fold, the base estimator is fitted on the training split and the maximum
+    class probabilities :math:`p_{\max}(x)` are computed on the validation
+    split. The per-fold threshold is the empirical :math:`r`-quantile of those
+    values:
+
+    .. math::
+
+        t_{\text{fold}} = Q_r\{p_{\max}(x) : x\in \text{fold}\}.
+
+    The learned threshold is the average across folds:
+
+    .. math::
+
+        t^{\ast} = \frac{1}{n_{\text{folds}}}
+            \sum_{\text{fold}} t_{\text{fold}}.
+
+    The selected average is stored in ``threshold_``. All thresholds are in
+    ``thresholds_``.
+
+    Predictions then follow the same rule as :class:`ThresholdFallbackClassifier`
+    using ``threshold_``.
 
     Parameters
     ----------
     estimator : object
         The base estimator supporting probabilistic predictions.
-    fallback_rates : array-like of shape (n_fallback_rates,) or float, default=0.05
-        The rate(s) of rejected test samples.
-
-        .. deprecated:: 0.1
-            ``fallback_rates`` was deprecated in 0.1 and will be removed in 0.2.
-            Use ``fallback_rate`` instead.
     fallback_rate : float, default=0.1
         The rate of rejected test samples.
     cv : int, cross-validation generator or an iterable, default=None
@@ -518,11 +574,15 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
         The label of a rejected example.
         Should be compatible w/ the class labels from training data.
     fallback_mode : {"return", "store"}, default="store"
-        While predicting, whether to return:
+        While predicting w/ the ``predict`` method, whether to return:
 
         * (``"return"``) a numpy ndarray of both predictions and fallbacks;
-        * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
+        * (``"store"``)  an ``FBNDArray`` of predictions storing also fallback mask;
         * (``"ignore"``) a numpy ndarray of only estimator's predictions.
+
+        Calling ``decision_function`` or ``predict_proba`` is equivalent to
+        ``estimator``'s corresponding calls except that with ``"store"``, ``FBNDArray``
+        is returned.
 
     Examples
     --------
@@ -544,6 +604,11 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
     1.0
     >>> rejector.set_params(fallback_mode="store").score(X, y)
     0.9
+
+    See also
+    --------
+    skfb.estimators.ThresholdFallbackClassifier : Fallback classification based on
+        fixed threshold.
     """
 
     _parameter_constraints = {**BaseFallbackClassifier._parameter_constraints}
@@ -561,7 +626,6 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
         estimator,
         *,
         fallback_rate=0.1,
-        fallback_rates=None,
         cv=None,
         n_jobs=None,
         verbose=0,
@@ -574,22 +638,19 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
             fallback_mode=fallback_mode,
         )
 
-        if fallback_rates is not None:
-            warnings.warn(
-                "`fallback_rates` was deprecated in version 0.1 and will be removed "
-                "in 0.2. Use `fallback_rate` instead (see "
-                "https://github.com/sanjaradylov/scikit-fallback/issues/11)",
-                category=FutureWarning,
-            )
-
         self.fallback_rate = fallback_rate
-        self.fallback_rates = fallback_rates
         self.cv = cv
         self.n_jobs = n_jobs
         self.verbose = verbose
 
     def _fit(self, X, y, set_attributes=None, **fit_params):
         """Learns the best threshold."""
+        X, y, sample_weight = check_X_y_sample_weight(
+            X,
+            y=y,
+            sample_weight=fit_params.get("sample_weight"),
+        )
+
         set_attributes = set_attributes or {}
 
         cv_ = check_cv(self.cv, y=y, classifier=True)
@@ -604,6 +665,7 @@ class RateFallbackClassifierCV(BaseFallbackClassifier):
                 X[train_idx],
                 X[test_idx],
                 y[train_idx],
+                None if sample_weight is None else sample_weight[train_idx],
                 self.fallback_rate,
             )
             for train_idx, test_idx in cv_.split(X, y)

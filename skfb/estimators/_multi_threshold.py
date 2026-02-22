@@ -24,7 +24,7 @@ except ModuleNotFoundError:
     from sklearn.utils.fixes import delayed
 
     warnings.warn(
-        "Using ``joblib.Parallel`` for ``MultiTresholdFallbackClassifierCV`` instead "
+        "Using ``joblib.Parallel`` for ``MultiThresholdFallbackClassifierCV`` instead "
         "of ``sklearn.utils.parallel.Parallel``, which was added in sklearn 1.3.",
         category=ImportWarning,
     )
@@ -108,7 +108,7 @@ def multi_threshold_predict_or_fallback(
         Whether to have:
 
         * (``"return"``) a numpy ndarray of both predictions and fallbacks;
-        * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
+        * (``"store"``)  an ``FBNDArray`` of predictions storing also fallback mask;
         * (``"ignore"``) a numpy ndarray of only estimator's predictions.
     return_probas : bool, default=False
         Whether to return also probabilities.
@@ -162,31 +162,51 @@ def multi_threshold_predict_or_fallback(
 
 
 class MultiThresholdFallbackClassifier(BaseFallbackClassifier):
-    """A fallback classifier based on local thresholds.
+    r"""A fallback classifier based on `local (class-wise) thresholds`.
 
-    Augments `estimator` behavior with a reject option based on confidence thresholds.
-    If `estimator`'s max probability for a given input is lower than the corresponding
-    class `threshold`, or if the difference between top two probabilities are lower than
-    `ambiguity_threshold`, the input is marked as rejected.
-    Depending on `fallback_mode`, predicts, masks, or ignores rejections.
+    Formally, let :math:`p(x) = [p_1(x),\dots,p_K(x)]` be the class probability vector
+    returned by the wrapped estimator for a sample :math:`x` and
+    :math:`\tau = [t_1,\dots,t_K]` `local thresholds`. A sample is rejected whenever the
+    maximum probability or the difference between top two probabilities are low:
+
+    .. math::
+
+        \max_k p_k(x) < \tau_{k^*} \quad \text{or} \quad
+        \max_k p_k(x) - \text{second\_max}_k p_k(x) < \alpha
+
+    where :math:`k^* = \arg\max_k p_k(x)`, :math:`\tau` is ``thresholds``, and
+    :math:`\alpha` is ``ambiguity_threshold``. The final output is
+
+    .. math::
+
+        y(x) = \begin{cases}
+            \arg\max_k p_k(x) & \text{if accepted},\\
+            \text{fallback\_label} & \text{otherwise}.
+        \end{cases}
+
+    The return format depends on ``fallback_mode``.
 
     Parameters
     ----------
     estimator : object
         The best estimator making decisions w/o fallbacks.
     thresholds : array-like, shape (n_classes,)
-        Mapping from class labels to local fallback thresholds.
+        Local thresholds, a threshold for each class.
     ambiguity_threshold : float, default=0.0
         Predictions w/ the close top 2 scores are rejected.
     fallback_label : any, default=-1
         The label of a rejected example.
         Should be compatible w/ the class labels from training data.
     fallback_mode : {"return", "store", "ignore"}, default="store"
-        While predicting, whether to return:
+        While predicting w/ the `predict` method, whether to return:
 
         * (``"return"``) a numpy ndarray of both predictions and fallbacks;
-        * (``"store"``)  an FBNDArray of predictions storing also fallback mask;
+        * (``"store"``)  an ``FBNDArray`` of predictions storing also fallback mask;
         * (``"ignore"``) a numpy ndarray of only estimator's predictions.
+
+        Calling ``decision_function`` or ``predict_proba`` is equivalent to
+        ``estimator``'s corresponding calls except that with ``"store"``, ``FBNDArray``
+        is returned.
 
     Examples
     --------
@@ -200,12 +220,17 @@ class MultiThresholdFallbackClassifier(BaseFallbackClassifier):
     ...         [4, 3], [3, 2], [4, 2], [2.9, 3], [3, 3.1],
     ...     ])
     >>> y = np.array(["a"] * 3 + ["b"] * 5 + ["c"] * 5)
-    >>> estimator = LogisticRegression(C=10_000, random_state=0).fit(X, y)
+    >>> estimator = LogisticRegression(C=10_000, random_state=0)
     >>> thresholds = [0.99, 0.8, 0.75]
     >>> r = MultiThresholdFallbackClassifier(estimator, thresholds=thresholds)
     >>> r.set_params(fallback_label="d", fallback_mode="return").fit(X, y).predict(X)
     array(['a', 'a', 'a', 'b', 'b', 'b', 'd', 'd', 'c', 'c', 'c', 'd', 'd'],
           dtype='<U1')
+
+    See also
+    --------
+    skfb.estimators.ThresholdFallbackClassifier : Fallback classification based on
+        fixed threshold.
     """
 
     _parameter_constraints = {**BaseFallbackClassifier._parameter_constraints}
