@@ -6,7 +6,8 @@ from sklearn.utils import check_consistent_length
 from sklearn.utils.validation import check_is_fitted
 
 from ..estimators.base import is_rejector
-from ._classification import predict_accept_confusion_matrix
+from ._classification import oracle_curve, predict_accept_confusion_matrix
+from ._common import utility_coverage_curve
 from ._ranking import fallback_quality_curve
 
 
@@ -647,3 +648,318 @@ class PairedHistogramDisplay:
 
         viz = cls(score_true, score_false)
         return viz.plot(ax=ax, cumulative=cumulative)
+
+
+class UCCurveDisplay:
+    """Utility-Coverage Curve visualization with optional oracle reference.
+
+    Plots the utility-coverage curve and optionally the oracle curve to visualize
+    how close a model's selective predictions are to the theoretical optimum.
+    The oracle curve is only meaningful when the utility metric is accuracy.
+
+    It is recommended to use
+    :func:`~skfb.metrics.UCCurveDisplay.from_estimator` or
+    :func:`~skfb.metrics.UCCurveDisplay.from_predictions` to create
+    a :class:`UCCurveDisplay`. All parameters are stored as attributes.
+
+    Parameters
+    ----------
+    utility : array-like
+        Utility values at each coverage level.
+    coverage : array-like
+        Coverage values for the utility-coverage curve.
+    oracle_utility : array-like, default=None
+        Oracle utility values at each coverage level. If None, oracle is not plotted.
+    oracle_coverage : array-like, default=None
+        Coverage values for the oracle curve. If None, oracle is not plotted.
+    uc_auc : float, default=None
+        Area under the utility-coverage curve.
+    oracle_auc : float, default=None
+        Area under the oracle curve.
+    estimator_name : str, default=None
+        Name of the estimator.
+    utility_name : str, default=None
+        Name of the utility metric.
+
+    Attributes
+    ----------
+    line_ : matplotlib Artist
+        Utility-coverage curve line.
+    oracle_line_ : matplotlib Artist
+        Oracle curve line.
+    ax_ : matplotlib Axes
+        Axes with the curves.
+    figure_ : matplotlib Figure
+        Figure containing the curves.
+
+    See Also
+    --------
+    skfb.metrics.utility_coverage_curve
+    skfb.metrics.oracle_curve
+    skfb.metrics.oracle_utility_gap_score
+    """
+
+    def __init__(
+        self,
+        *,
+        utility,
+        coverage,
+        oracle_utility=None,
+        oracle_coverage=None,
+        uc_auc=None,
+        oracle_auc=None,
+        estimator_name=None,
+        utility_name=None,
+    ):
+        self.utility = utility
+        self.coverage = coverage
+        self.oracle_utility = oracle_utility
+        self.oracle_coverage = oracle_coverage
+        self.uc_auc = uc_auc
+        self.oracle_auc = oracle_auc
+        self.estimator_name = estimator_name
+        self.utility_name = utility_name
+
+    def plot(self, ax=None, *, line_kwargs=None, oracle_line_kwargs=None):
+        """Plots utility-coverage and oracle curves.
+
+        Parameters
+        ----------
+        ax : matplotlib Axes, default=None
+            Axes object to plot on. If None, a new figure and axes is created.
+        line_kwargs : dict, default=None
+            Additional keyword arguments passed to the utility-coverage line.
+        oracle_line_kwargs : dict, default=None
+            Additional keyword arguments passed to the oracle line.
+
+        Returns
+        -------
+        display : :class:`UCCurveDisplay`
+        """
+        check_matplotlib_support(f"{self.__class__.__name__}.plot")
+
+        import matplotlib.pyplot as plt
+
+        if ax is None:
+            _, self.ax_ = plt.subplots()
+        else:
+            self.ax_ = ax
+        self.figure_ = self.ax_.figure
+
+        # Oracle curve (only if data is available)
+        self.oracle_line_ = None
+        if self.oracle_utility is not None and self.oracle_coverage is not None:
+            oracle_line_kwargs = oracle_line_kwargs or {}
+            oracle_line_kwargs.setdefault("linestyle", "--")
+            oracle_line_kwargs.setdefault("color", "grey")
+            if self.oracle_auc is not None:
+                oracle_line_kwargs.setdefault(
+                    "label", f"Oracle (AUC = {self.oracle_auc:.2f})"
+                )
+            else:
+                oracle_line_kwargs.setdefault("label", "Oracle")
+
+            (self.oracle_line_,) = self.ax_.plot(
+                self.oracle_coverage, self.oracle_utility, **oracle_line_kwargs
+            )
+
+        # Utility-coverage curve
+        line_kwargs = line_kwargs or {}
+        label = self.estimator_name or "Model"
+        if self.uc_auc is not None:
+            label += f" (AUC = {self.uc_auc:.2f})"
+        line_kwargs.setdefault("label", label)
+
+        (self.line_,) = self.ax_.plot(self.coverage, self.utility, **line_kwargs)
+
+        self.ax_.set(
+            xlabel="Coverage",
+            ylabel="Utility" if self.utility_name is None else self.utility_name,
+        )
+        self.ax_.legend()
+        self.ax_.set_title("Utility-Coverage Curve")
+
+        return self
+
+    @classmethod
+    def from_estimator(
+        cls,
+        estimator,
+        X,
+        y,
+        *,
+        scoring="accuracy",
+        n_bins=10,
+        show_oracle="auto",
+        labels=None,
+        sample_weight=None,
+        estimator_name=None,
+        utility_name=None,
+        ax=None,
+        line_kwargs=None,
+        oracle_line_kwargs=None,
+    ):
+        """Creates display from a fitted estimator and data.
+
+        Parameters
+        ----------
+        estimator : estimator instance
+            Fitted classifier with a ``predict_proba`` method.
+        X : {array-like, sparse matrix} of shape (n_samples, n_features)
+            Input values.
+        y : array-like of shape (n_samples,)
+            True labels.
+        scoring : str or callable, default="accuracy"
+            Scoring function for utility evaluation.
+        n_bins : int, default=10
+            Number of evenly spaced coverage levels to evaluate at.
+        show_oracle : bool or "auto", default="auto"
+            Whether to plot the oracle curve. If "auto", shows the oracle
+            only when ``scoring="accuracy"``.
+        labels : array-like, default=None
+            Class labels ordered by column index in probability matrix.
+        sample_weight : array-like of shape (n_samples,), default=None
+            Sample weights.
+        estimator_name : str, default=None
+            Name of the estimator for the legend.
+        utility_name : str, default=None
+            Name of the utility metric for the y-axis label.
+        ax : matplotlib Axes, default=None
+            Axes object to plot on.
+        line_kwargs : dict, default=None
+            Keyword arguments for the utility-coverage line.
+        oracle_line_kwargs : dict, default=None
+            Keyword arguments for the oracle line.
+
+        Returns
+        -------
+        display : :class:`UCCurveDisplay`
+        """
+        check_matplotlib_support(f"{cls.__name__}.from_estimator")
+        check_is_fitted(estimator)
+
+        estimator_name = estimator_name or estimator.__class__.__name__
+        y_prob = estimator.predict_proba(X)
+
+        return cls.from_predictions(
+            y,
+            y_prob,
+            scoring=scoring,
+            n_bins=n_bins,
+            show_oracle=show_oracle,
+            labels=labels,
+            sample_weight=sample_weight,
+            estimator_name=estimator_name,
+            utility_name=utility_name,
+            ax=ax,
+            line_kwargs=line_kwargs,
+            oracle_line_kwargs=oracle_line_kwargs,
+        )
+
+    @classmethod
+    def from_predictions(
+        cls,
+        y_true,
+        y_pred,
+        *,
+        y_score=None,
+        scoring="accuracy",
+        n_bins=10,
+        show_oracle="auto",
+        labels=None,
+        sample_weight=None,
+        estimator_name=None,
+        utility_name=None,
+        ax=None,
+        line_kwargs=None,
+        oracle_line_kwargs=None,
+    ):
+        """Creates display from true labels and predictions.
+
+        Parameters
+        ----------
+        y_true : array-like of shape (n_samples,)
+            True labels.
+        y_pred : array-like of shape (n_samples,) or (n_samples, n_classes)
+            Predicted labels or probability matrix.
+        y_score : array-like of shape (n_samples,), default=None
+            Confidence scores. If None, inferred from 2D ``y_pred``.
+        scoring : str or callable, default="accuracy"
+            Scoring function for utility evaluation.
+        n_bins : int, default=10
+            Number of evenly spaced coverage levels to evaluate at.
+        show_oracle : bool or "auto", default="auto"
+            Whether to plot the oracle curve. If "auto", shows the oracle
+            only when ``scoring="accuracy"``.
+        labels : array-like, default=None
+            Class labels ordered by column index in probability matrix.
+        sample_weight : array-like of shape (n_samples,), default=None
+            Sample weights.
+        estimator_name : str, default=None
+            Name of the estimator for the legend.
+        utility_name : str, default=None
+            Name of the utility metric for the y-axis label.
+        ax : matplotlib Axes, default=None
+            Axes object to plot on.
+        line_kwargs : dict, default=None
+            Keyword arguments for the utility-coverage line.
+        oracle_line_kwargs : dict, default=None
+            Keyword arguments for the oracle line.
+
+        Returns
+        -------
+        display : :class:`UCCurveDisplay`
+        """
+        check_matplotlib_support(f"{cls.__name__}.from_predictions")
+
+        import numpy as np
+
+        # Resolve whether to show oracle
+        if show_oracle == "auto":
+            show_oracle = scoring == "accuracy"
+
+        y_pred_arr = np.asarray(y_pred)
+
+        # Compute utility-coverage curve
+        utility, coverage, _ = utility_coverage_curve(
+            y_true,
+            y_pred,
+            y_score=y_score,
+            scoring=scoring,
+            n_bins=n_bins,
+            labels=labels,
+            sample_weight=sample_weight,
+        )
+        uc_auc_val = auc(coverage, utility)
+
+        # Compute oracle curve only when applicable
+        o_utility = None
+        o_coverage = None
+        oracle_auc_val = None
+        if show_oracle:
+            if y_pred_arr.ndim == 2:
+                if labels is not None:
+                    y_pred_hard = np.asarray(labels)[np.argmax(y_pred_arr, axis=1)]
+                else:
+                    y_pred_hard = np.argmax(y_pred_arr, axis=1)
+            else:
+                y_pred_hard = y_pred_arr
+
+            o_utility, o_coverage = oracle_curve(y_true, y_pred_hard, n_bins=n_bins)
+            oracle_auc_val = auc(o_coverage, o_utility)
+
+        viz = cls(
+            utility=utility,
+            coverage=coverage,
+            oracle_utility=o_utility,
+            oracle_coverage=o_coverage,
+            uc_auc=uc_auc_val,
+            oracle_auc=oracle_auc_val,
+            estimator_name=estimator_name,
+            utility_name=utility_name,
+        )
+        return viz.plot(
+            ax=ax,
+            line_kwargs=line_kwargs,
+            oracle_line_kwargs=oracle_line_kwargs,
+        )

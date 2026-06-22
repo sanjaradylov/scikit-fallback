@@ -10,6 +10,7 @@ from skfb.core import array as ska
 from skfb.experimental import enable_error_rejection_loss  # noqa: F401
 from skfb.metrics import (
     error_rejection_loss,
+    oracle_curve,
     predict_accept_confusion_matrix,
     predict_reject_accuracy_score,
     predict_reject_recall_score,
@@ -149,6 +150,18 @@ def test_predict_reject_accuracy_score(y_true, y_pred, result):
 )
 def test_predict_reject_recall_score(y_true, y_pred, beta, result):
     assert predict_reject_recall_score(y_true, y_pred, beta=beta) == result
+
+
+def test_oracle_curve():
+    """Tests that the oracle curve is correctly computed."""
+    y_true = np.array([0, 1, 1, 0, 1, 0, 1, 0, 0, 0])
+    y_pred = np.array([0, 1, 0, 0, 1, 0, 0, 1, 0, 1])
+    utility, coverage = oracle_curve(y_true, y_pred)
+    np.testing.assert_almost_equal(
+        utility,
+        np.array([1.0] * 6 + [6 / 7, 6 / 8, 6 / 9, 6 / 10]),
+    )
+    np.testing.assert_almost_equal(coverage, np.linspace(0.1, 1.0, 10))
 
 
 @pytest.mark.parametrize(

@@ -12,6 +12,7 @@ import warnings
 
 from sklearn.metrics import (
     accuracy_score,
+    auc,
     confusion_matrix,
     get_scorer,
     get_scorer_names,
@@ -31,7 +32,7 @@ from ..utils._legacy import (
     StrOptions,
     validate_params,
 )
-from ._common import prediction_quality
+from ._common import prediction_quality, utility_coverage_auc_score
 
 
 @validate_params(
@@ -277,6 +278,199 @@ def predict_reject_recall_score(y_true, y_pred, beta=0.5):
     cm = predict_accept_confusion_matrix(y_true, y_pred)
     ta, tr, fa, fr = cm[1, 1], cm[0, 0], cm[0, 1], cm[1, 0]
     return ta / (ta + fr) * beta + tr / (tr + fa) * (1 - beta)
+
+
+@validate_params(
+    {
+        "y_true": ["array-like"],
+        "y_pred": ["array-like"],
+        "n_bins": [int, None],
+    },
+    prefer_skip_nested_validation=True,
+)
+def oracle_curve(y_true, y_pred, *, n_bins=None):
+    """Computes the oracle curve.
+
+    The oracle curve represents the theoretical best selective accuracy
+    achievable at each coverage level, assuming perfect knowledge of which
+    predictions are correct.
+
+    Suppose the full-coverage accuracy of a model is
+
+    .. math:: a = \\Pr\\{y_{\\text{true}} = y_{\\text{pred}}\\}
+
+    Then the oracle selective accuracy is
+
+    .. math::
+        A^*(a, c) = \\begin{cases}
+            1, & c \\leq a \\\\
+            \\frac{a}{c}, & c > a
+        \\end{cases}
+
+    Parameters
+    ----------
+    y_true : array-like, shape (n_samples,)
+        True labels.
+    y_pred : array-like, shape (n_samples,)
+        Predicted labels.
+    n_bins : int, default=None
+        Number of evenly spaced coverage levels. If None, evaluates at
+        every sample-level coverage (k/n for k=1..n).
+
+    Returns
+    -------
+    utility : ndarray, shape (n_bins,) or (n_samples,)
+        Oracle accuracy values for each coverage level.
+    coverage : ndarray, shape (n_bins,) or (n_samples,)
+        Coverage values.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from skfb.metrics._classification import oracle_curve
+    >>> y_true = np.array([0, 1, 1, 0, 1])
+    >>> y_pred = np.array([0, 1, 0, 0, 1])
+    >>> utility, coverage = oracle_curve(y_true, y_pred)
+    >>> utility
+    array([1. , 1. , 1. , 1. , 0.8])
+    >>> coverage
+    array([0.2, 0.4, 0.6, 0.8, 1. ])
+    """
+    y_type, y_true, y_pred = _check_targets(y_true, y_pred)
+
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+
+    accuracy = np.mean(y_true == y_pred)
+
+    if n_bins is not None:
+        coverage = np.linspace(1.0 / n_bins, 1.0, n_bins)
+    else:
+        n_samples = len(y_true)
+        coverage = np.arange(1, n_samples + 1) / n_samples
+
+    utility = np.where(coverage <= accuracy, 1.0, accuracy / coverage)
+
+    return utility, coverage
+
+
+@validate_params(
+    {
+        "y_true": ["array-like"],
+        "y_pred": ["array-like"],
+    },
+    prefer_skip_nested_validation=True,
+)
+def oracle_auc_score(y_true, y_pred):
+    """Calculates the area under the oracle curve.
+
+    The oracle curve represents the theoretical best selective accuracy
+    achievable at each coverage level, assuming perfect knowledge of which
+    predictions are correct.
+
+    Parameters
+    ----------
+    y_true : array-like, shape (n_samples,)
+        True labels.
+    y_pred : array-like, shape (n_samples,)
+        Predicted labels.
+
+    Returns
+    -------
+    float : area under the oracle curve
+    """
+    utility, coverage = oracle_curve(y_true, y_pred)
+    return auc(coverage, utility)
+
+
+@validate_params(
+    {
+        "y_true": ["array-like"],
+        "y_pred": ["array-like"],
+        "y_score": ["array-like", None],
+        "scoring": [str, callable],
+        "labels": ["array-like", None],
+        "sample_weight": ["array-like", None],
+    },
+    prefer_skip_nested_validation=True,
+)
+def oracle_utility_gap_score(
+    y_true,
+    y_pred,
+    *,
+    y_score=None,
+    scoring="accuracy",
+    labels=None,
+    sample_weight=None,
+):
+    """Computes the gap between oracle AUC and utility-coverage AUC.
+
+    A lower value indicates the model's selective predictions are closer to
+    the theoretical optimum. A value of 0 means the model achieves oracle-level
+    selective accuracy at every coverage level.
+
+    .. math::
+        \\text{gap} = \\text{AUC}_{\\text{oracle}} - \\text{AUC}_{\\text{utility}}
+
+    Parameters
+    ----------
+    y_true : array-like, shape (n_samples,)
+        True labels.
+    y_pred : array-like, shape (n_samples,) or (n_samples, n_classes)
+        Predicted labels or probability matrix. If 2D and ``y_score`` is None,
+        confidence scores and hard predictions are inferred from this matrix.
+    y_score : array-like, shape (n_samples,), default=None
+        Confidence scores for each prediction. If None, inferred from
+        ``y_pred`` (requires ``y_pred`` to be 2D).
+    scoring : str or callable, default="accuracy"
+        A string (see :ref:`scoring_parameter`) or a scorer callable object /
+        function with signature ``scorer(y_true, y_pred)``.
+    labels : array-like, shape (n_classes,), default=None
+        Class labels ordered by column index in ``y_pred`` when ``y_pred`` is 2D.
+    sample_weight : array-like of shape (n_samples,), default=None
+        Sample weights.
+
+    Returns
+    -------
+    gap : float
+        Difference between oracle AUC and utility-coverage AUC (>= 0).
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from skfb.metrics import oracle_utility_gap_score
+    >>> y_true = np.array([0, 1, 0, 1, 0])
+    >>> y_proba = np.array([
+    ...     [0.9, 0.1],
+    ...     [0.2, 0.8],
+    ...     [0.7, 0.3],
+    ...     [0.3, 0.7],
+    ...     [0.6, 0.4],
+    ... ])
+    >>> oracle_utility_gap_score(y_true, y_proba)
+    0.0
+    """
+    y_pred_arr = np.asarray(y_pred)
+
+    # Resolve hard predictions for oracle_auc_score
+    if y_pred_arr.ndim == 2:
+        if labels is not None:
+            y_pred_hard = np.asarray(labels)[np.argmax(y_pred_arr, axis=1)]
+        else:
+            y_pred_hard = np.argmax(y_pred_arr, axis=1)
+    else:
+        y_pred_hard = y_pred_arr
+
+    o_auc = oracle_auc_score(y_true, y_pred_hard)
+    uc_auc = utility_coverage_auc_score(
+        y_true,
+        y_pred,
+        y_score=y_score,
+        scoring=scoring,
+        labels=labels,
+        sample_weight=sample_weight,
+    )
+    return o_auc - uc_auc
 
 
 def error_rejection_loss(
