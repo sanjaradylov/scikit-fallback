@@ -22,7 +22,7 @@ thresholds.
 .. autoclass:: skfb.estimators.MultiThresholdFallbackClassifier
     :inherited-members: fit, predict, predict_proba, predict_log_proba, decision_function
 
-.. autoclass:: skfb.estimators.RateFallbackClassifierCV
+.. autoclass:: skfb.estimators.CoverageFallbackClassifierCV
     :inherited-members: fit, predict, predict_proba, predict_log_proba, decision_function
 
 .. autoclass:: skfb.estimators.RuleClassifier

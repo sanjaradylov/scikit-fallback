@@ -1,14 +1,14 @@
 """
-==========================================================================
-Learning to reject ambiguously labeled samples w/ RateFallbackClassifierCV
-==========================================================================
+==============================================================================
+Learning to reject ambiguously labeled samples w/ CoverageFallbackClassifierCV
+==============================================================================
 """
 
 from sklearn.datasets import make_blobs
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 
-from skfb.estimators import RateFallbackClassifierCV
+from skfb.estimators import CoverageFallbackClassifierCV
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -34,7 +34,7 @@ X_train, X_test, y_train, y_test, in_mask_train, in_mask_test = train_test_split
 
 # region Train a rejector
 estimator = LogisticRegression(C=10_000, random_state=0)
-rejector = RateFallbackClassifierCV(estimator, fallback_rate=1 / 3, cv=3)
+rejector = CoverageFallbackClassifierCV(estimator, coverage=2 / 3, cv=3)
 rejector.fit(X_train, y_train)
 # endregion
 
