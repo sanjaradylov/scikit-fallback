@@ -1,5 +1,7 @@
 """Fallback-based visualizations"""
 
+import warnings
+
 from sklearn.metrics import accuracy_score, auc, ConfusionMatrixDisplay
 from sklearn.pipeline import Pipeline
 from sklearn.utils import check_consistent_length
@@ -8,7 +10,7 @@ from sklearn.utils.validation import check_is_fitted
 from ..estimators.base import is_rejector
 from ._classification import oracle_curve, predict_accept_confusion_matrix
 from ._common import utility_coverage_curve
-from ._ranking import fallback_quality_curve
+from ._ranking import _fallback_quality_curve
 
 
 def check_matplotlib_support(caller_name):
@@ -406,6 +408,10 @@ class PAConfusionMatrixDisplay(ConfusionMatrixDisplay):
 class FQCurveDisplay:
     """Fallback-Quality Curve visualization.
 
+    .. deprecated:: 0.3
+        Use :class:`~skfb.metrics.UCCurveDisplay` instead, which plots the same
+        curve against coverage (``= 1 - fallback rate``).
+
     It is recommend to use
     :func:`~skfb.metrics.FQCurveDisplay.from_estimator` or
     :func:`~skfb.metrics.FQCurveDisplay.from_predictions` to create
@@ -449,6 +455,13 @@ class FQCurveDisplay:
         estimator_name=None,
         metric_name=None,
     ):
+        warnings.warn(
+            "FQCurveDisplay is deprecated in 0.3; "
+            "use skfb.metrics.UCCurveDisplay instead "
+            "(coverage = 1 - fallback rate).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.fallback_rates = fallback_rates
         self.scores = scores
         self.fq_auc = fq_auc
@@ -464,6 +477,8 @@ class FQCurveDisplay:
 
         if ax is None:
             _, self.ax_ = plt.subplots()
+        else:
+            self.ax_ = ax
         self.figure_ = self.ax_.figure
 
         line_kwargs = line_kwargs or {}
@@ -484,7 +499,6 @@ class FQCurveDisplay:
             xlim=ax_kwargs.get("xlim"),
             ylabel=ylabel,
             ylim=ax_kwargs.get("ylim"),
-            aspect="equal",
         )
 
         if "label" in line_kwargs:
@@ -555,7 +569,7 @@ class FQCurveDisplay:
         check_matplotlib_support(f"{cls.__name__}.from_predictions")
         check_consistent_length(y_true, y_pred, sample_weight)
 
-        fq_curve = fallback_quality_curve(
+        fq_curve = _fallback_quality_curve(
             y_true,
             y_pred,
             score_func,
@@ -790,6 +804,8 @@ class UCCurveDisplay:
         *,
         scoring="accuracy",
         n_bins=10,
+        min_coverage=0.05,
+        max_coverage=1.0,
         show_oracle="auto",
         labels=None,
         sample_weight=None,
@@ -813,6 +829,10 @@ class UCCurveDisplay:
             Scoring function for utility evaluation.
         n_bins : int, default=10
             Number of evenly spaced coverage levels to evaluate at.
+        min_coverage : float, default=0.05
+            Smallest coverage level to plot. Applies to both curves.
+        max_coverage : float, default=1.0
+            Largest coverage level to plot. Applies to both curves.
         show_oracle : bool or "auto", default="auto"
             Whether to plot the oracle curve. If "auto", shows the oracle
             only when ``scoring="accuracy"``.
@@ -846,6 +866,8 @@ class UCCurveDisplay:
             y_prob,
             scoring=scoring,
             n_bins=n_bins,
+            min_coverage=min_coverage,
+            max_coverage=max_coverage,
             show_oracle=show_oracle,
             labels=labels,
             sample_weight=sample_weight,
@@ -865,6 +887,8 @@ class UCCurveDisplay:
         y_score=None,
         scoring="accuracy",
         n_bins=10,
+        min_coverage=0.05,
+        max_coverage=1.0,
         show_oracle="auto",
         labels=None,
         sample_weight=None,
@@ -888,6 +912,10 @@ class UCCurveDisplay:
             Scoring function for utility evaluation.
         n_bins : int, default=10
             Number of evenly spaced coverage levels to evaluate at.
+        min_coverage : float, default=0.05
+            Smallest coverage level to plot. Applies to both curves.
+        max_coverage : float, default=1.0
+            Largest coverage level to plot. Applies to both curves.
         show_oracle : bool or "auto", default="auto"
             Whether to plot the oracle curve. If "auto", shows the oracle
             only when ``scoring="accuracy"``.
@@ -927,6 +955,8 @@ class UCCurveDisplay:
             y_score=y_score,
             scoring=scoring,
             n_bins=n_bins,
+            min_coverage=min_coverage,
+            max_coverage=max_coverage,
             labels=labels,
             sample_weight=sample_weight,
         )
@@ -945,7 +975,13 @@ class UCCurveDisplay:
             else:
                 y_pred_hard = y_pred_arr
 
-            o_utility, o_coverage = oracle_curve(y_true, y_pred_hard, n_bins=n_bins)
+            o_utility, o_coverage = oracle_curve(
+                y_true,
+                y_pred_hard,
+                n_bins=n_bins,
+                min_coverage=min_coverage,
+                max_coverage=max_coverage,
+            )
             oracle_auc_val = auc(o_coverage, o_utility)
 
         viz = cls(

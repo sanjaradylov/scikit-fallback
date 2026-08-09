@@ -135,3 +135,56 @@ def test_utility_coverage_curve_raises_without_score_and_1d():
 
     with pytest.raises(ValueError, match="y_score must be provided"):
         utility_coverage_curve(y_true, y_pred)
+
+
+def test_utility_coverage_curve_clips_coverage_range():
+    """Coverage levels outside [min_coverage, max_coverage] are dropped."""
+    y_true = np.arange(10) % 2
+    y_pred = y_true.copy()
+    y_score = np.linspace(0.1, 1.0, 10)
+
+    utility, coverage, thresholds = utility_coverage_curve(
+        y_true,
+        y_pred,
+        y_score=y_score,
+        min_coverage=0.3,
+        max_coverage=0.7,
+    )
+
+    np.testing.assert_allclose(coverage, np.array([0.3, 0.4, 0.5, 0.6, 0.7]))
+    assert len(utility) == len(thresholds) == len(coverage)
+
+
+def test_utility_coverage_curve_drops_low_coverage_tail_by_default():
+    """The default min_coverage discards the high-variance low-coverage tail."""
+    y_true = np.arange(100) % 2
+    y_pred = y_true.copy()
+    y_score = np.linspace(0.01, 1.0, 100)
+
+    _, coverage, _ = utility_coverage_curve(y_true, y_pred, y_score=y_score)
+
+    assert coverage.min() >= 0.05
+    np.testing.assert_allclose(coverage.max(), 1.0)
+
+
+@pytest.mark.parametrize(
+    "min_coverage, max_coverage, match",
+    [
+        (0.8, 0.2, "min_coverage should be less than max_coverage"),
+        (0.0, 0.05, "No coverage level falls within"),
+    ],
+)
+def test_utility_coverage_curve_invalid_range(min_coverage, max_coverage, match):
+    """Inverted or empty coverage ranges raise informative errors."""
+    y_true = np.array([0, 1, 0, 1])
+    y_pred = np.array([0, 1, 0, 1])
+    y_score = np.array([0.9, 0.8, 0.7, 0.6])
+
+    with pytest.raises(ValueError, match=match):
+        utility_coverage_curve(
+            y_true,
+            y_pred,
+            y_score=y_score,
+            min_coverage=min_coverage,
+            max_coverage=max_coverage,
+        )

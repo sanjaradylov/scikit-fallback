@@ -285,10 +285,12 @@ def predict_reject_recall_score(y_true, y_pred, beta=0.5):
         "y_true": ["array-like"],
         "y_pred": ["array-like"],
         "n_bins": [int, None],
+        "min_coverage": [Interval(Real, 0.0, 1.0, closed="both")],
+        "max_coverage": [Interval(Real, 0.0, 1.0, closed="both")],
     },
     prefer_skip_nested_validation=True,
 )
-def oracle_curve(y_true, y_pred, *, n_bins=None):
+def oracle_curve(y_true, y_pred, *, n_bins=None, min_coverage=0.05, max_coverage=1.0):
     """Computes the oracle curve.
 
     The oracle curve represents the theoretical best selective accuracy
@@ -316,6 +318,10 @@ def oracle_curve(y_true, y_pred, *, n_bins=None):
     n_bins : int, default=None
         Number of evenly spaced coverage levels. If None, evaluates at
         every sample-level coverage (k/n for k=1..n).
+    min_coverage : float, default=0.05
+        Smallest coverage level to report.
+    max_coverage : float, default=1.0
+        Largest coverage level to report.
 
     Returns
     -------
@@ -336,7 +342,10 @@ def oracle_curve(y_true, y_pred, *, n_bins=None):
     >>> coverage
     array([0.2, 0.4, 0.6, 0.8, 1. ])
     """
-    y_type, y_true, y_pred = _check_targets(y_true, y_pred)
+    if min_coverage >= max_coverage:
+        raise ValueError("`min_coverage` should be less than `max_coverage`.")
+
+    _, y_true, y_pred = _check_targets(y_true, y_pred)
 
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
@@ -349,6 +358,14 @@ def oracle_curve(y_true, y_pred, *, n_bins=None):
         n_samples = len(y_true)
         coverage = np.arange(1, n_samples + 1) / n_samples
 
+    in_range = (coverage >= min_coverage) & (coverage <= max_coverage)
+    if not in_range.any():
+        raise ValueError(
+            f"No coverage level falls within [{min_coverage}, {max_coverage}]; "
+            "widen the range or provide more samples."
+        )
+    coverage = coverage[in_range]
+
     utility = np.where(coverage <= accuracy, 1.0, accuracy / coverage)
 
     return utility, coverage
@@ -358,10 +375,12 @@ def oracle_curve(y_true, y_pred, *, n_bins=None):
     {
         "y_true": ["array-like"],
         "y_pred": ["array-like"],
+        "min_coverage": [Interval(Real, 0.0, 1.0, closed="both")],
+        "max_coverage": [Interval(Real, 0.0, 1.0, closed="both")],
     },
     prefer_skip_nested_validation=True,
 )
-def oracle_auc_score(y_true, y_pred):
+def oracle_auc_score(y_true, y_pred, *, min_coverage=0.05, max_coverage=1.0):
     """Calculates the area under the oracle curve.
 
     The oracle curve represents the theoretical best selective accuracy
@@ -374,12 +393,18 @@ def oracle_auc_score(y_true, y_pred):
         True labels.
     y_pred : array-like, shape (n_samples,)
         Predicted labels.
+    min_coverage : float, default=0.05
+        Smallest coverage level to integrate from.
+    max_coverage : float, default=1.0
+        Largest coverage level to integrate to.
 
     Returns
     -------
     float : area under the oracle curve
     """
-    utility, coverage = oracle_curve(y_true, y_pred)
+    utility, coverage = oracle_curve(
+        y_true, y_pred, min_coverage=min_coverage, max_coverage=max_coverage
+    )
     return auc(coverage, utility)
 
 
@@ -389,6 +414,8 @@ def oracle_auc_score(y_true, y_pred):
         "y_pred": ["array-like"],
         "y_score": ["array-like", None],
         "scoring": [str, callable],
+        "min_coverage": [Interval(Real, 0.0, 1.0, closed="both")],
+        "max_coverage": [Interval(Real, 0.0, 1.0, closed="both")],
         "labels": ["array-like", None],
         "sample_weight": ["array-like", None],
     },
@@ -400,6 +427,8 @@ def oracle_utility_gap_score(
     *,
     y_score=None,
     scoring="accuracy",
+    min_coverage=0.05,
+    max_coverage=1.0,
     labels=None,
     sample_weight=None,
 ):
@@ -425,6 +454,10 @@ def oracle_utility_gap_score(
     scoring : str or callable, default="accuracy"
         A string (see :ref:`scoring_parameter`) or a scorer callable object /
         function with signature ``scorer(y_true, y_pred)``.
+    min_coverage : float, default=0.05
+        Smallest coverage level to integrate from. Both curves use the same range.
+    max_coverage : float, default=1.0
+        Largest coverage level to integrate to. Both curves use the same range.
     labels : array-like, shape (n_classes,), default=None
         Class labels ordered by column index in ``y_pred`` when ``y_pred`` is 2D.
     sample_weight : array-like of shape (n_samples,), default=None
@@ -461,12 +494,16 @@ def oracle_utility_gap_score(
     else:
         y_pred_hard = y_pred_arr
 
-    o_auc = oracle_auc_score(y_true, y_pred_hard)
+    o_auc = oracle_auc_score(
+        y_true, y_pred_hard, min_coverage=min_coverage, max_coverage=max_coverage
+    )
     uc_auc = utility_coverage_auc_score(
         y_true,
         y_pred,
         y_score=y_score,
         scoring=scoring,
+        min_coverage=min_coverage,
+        max_coverage=max_coverage,
         labels=labels,
         sample_weight=sample_weight,
     )

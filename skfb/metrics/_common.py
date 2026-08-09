@@ -8,7 +8,7 @@ from sklearn.utils import check_consistent_length
 
 from ..core import array as ska
 from ..core.exceptions import SKFBWarning
-from ..utils._legacy import validate_params
+from ..utils._legacy import Interval, Real, validate_params
 
 
 @validate_params(
@@ -78,6 +78,8 @@ def prediction_quality(
         "y_score": ["array-like", None],
         "scoring": [str, callable],
         "n_bins": [int, None],
+        "min_coverage": [Interval(Real, 0.0, 1.0, closed="both")],
+        "max_coverage": [Interval(Real, 0.0, 1.0, closed="both")],
         "labels": ["array-like", None],
         "sample_weight": ["array-like", None],
     },
@@ -90,6 +92,8 @@ def utility_coverage_curve(
     y_score=None,
     scoring="accuracy",
     n_bins=None,
+    min_coverage=0.05,
+    max_coverage=1.0,
     labels=None,
     sample_weight=None,
 ):
@@ -122,6 +126,11 @@ def utility_coverage_curve(
         Number of evenly spaced coverage levels to evaluate at. If None,
         evaluation happens at each unique score threshold. For example,
         ``n_bins=10`` evaluates at coverage = 0.1, 0.2, ..., 1.0.
+    min_coverage : float, default=0.05
+        Smallest coverage level to report. Utility estimated on very few accepted
+        samples has high variance, so the low-coverage tail is dropped by default.
+    max_coverage : float, default=1.0
+        Largest coverage level to report.
     labels : array-like, shape (n_classes,), default=None
         Class labels ordered by column index in ``y_pred`` when ``y_pred`` is 2D.
         Used to map argmax indices to actual label values.
@@ -162,6 +171,9 @@ def utility_coverage_curve(
     >>> thresholds
     array([0.95, 0.9, 0.85, 0.8, 0.7, 0.6, 0.55, 0.4])
     """
+    if min_coverage >= max_coverage:
+        raise ValueError("min_coverage should be less than max_coverage")
+
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
 
@@ -283,8 +295,16 @@ def utility_coverage_curve(
     else:
         eval_indices = threshold_end_indices
 
-    thresholds = y_score[eval_indices]
     coverage = (eval_indices + 1) / len(y_score)
+    in_range = (coverage >= min_coverage) & (coverage <= max_coverage)
+    if not in_range.any():
+        raise ValueError(
+            f"No coverage level falls within [{min_coverage}, {max_coverage}]; "
+            "widen the range or provide more samples"
+        )
+    eval_indices = eval_indices[in_range]
+    coverage = coverage[in_range]
+    thresholds = y_score[eval_indices]
 
     utility = np.empty_like(coverage, dtype=float)
     for i, end_idx in enumerate(eval_indices):
@@ -303,6 +323,8 @@ def utility_coverage_curve(
         "y_pred": ["array-like"],
         "y_score": ["array-like", None],
         "scoring": [str, callable],
+        "min_coverage": [Interval(Real, 0.0, 1.0, closed="both")],
+        "max_coverage": [Interval(Real, 0.0, 1.0, closed="both")],
         "labels": ["array-like", None],
         "sample_weight": ["array-like", None],
     },
@@ -314,6 +336,8 @@ def utility_coverage_auc_score(
     *,
     y_score=None,
     scoring="accuracy",
+    min_coverage=0.05,
+    max_coverage=1.0,
     labels=None,
     sample_weight=None,
 ):
@@ -332,6 +356,10 @@ def utility_coverage_auc_score(
     scoring : str or callable, default="accuracy"
         A string (see :ref:`scoring_parameter`) or a scorer callable object /
         function with signature ``scorer(y_true, y_pred)``.
+    min_coverage : float, default=0.05
+        Smallest coverage level to integrate from.
+    max_coverage : float, default=1.0
+        Largest coverage level to integrate to.
     labels : array-like, shape (n_classes,), default=None
         Class labels ordered by column index in ``y_pred`` when ``y_pred`` is 2D.
     sample_weight : array-like of shape (n_samples,), default=None
@@ -340,13 +368,16 @@ def utility_coverage_auc_score(
     Returns
     -------
     auc_score : float
-        Area under the utility-coverage curve.
+        Area under the utility-coverage curve over
+        ``[min_coverage, max_coverage]``.
     """
     utility, coverage, _ = utility_coverage_curve(
         y_true,
         y_pred,
         y_score=y_score,
         scoring=scoring,
+        min_coverage=min_coverage,
+        max_coverage=max_coverage,
         labels=labels,
         sample_weight=sample_weight,
     )

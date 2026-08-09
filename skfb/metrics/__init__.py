@@ -1,6 +1,10 @@
 """The :mod:`skfb.metrics` module includes score functions with a reject option."""
 
 __all__ = (
+    "FQCurveDisplay",
+    "PAConfusionMatrixDisplay",
+    "PairedHistogramDisplay",
+    "UCCurveDisplay",
     "fallback_quality_auc_score",
     "fallback_quality_curve",
     "get_scoring",
@@ -11,11 +15,8 @@ __all__ = (
     "predict_reject_accuracy_score",
     "predict_reject_recall_score",
     "prediction_quality",
+    "utility_coverage_auc_score",
     "utility_coverage_curve",
-    "FQCurveDisplay",
-    "PAConfusionMatrixDisplay",
-    "PairedHistogramDisplay",
-    "UCCurveDisplay",
 )
 
 from ._classification import (
@@ -27,7 +28,11 @@ from ._classification import (
     predict_reject_accuracy_score,
     predict_reject_recall_score,
 )
-from ._common import prediction_quality, utility_coverage_curve
+from ._common import (
+    prediction_quality,
+    utility_coverage_auc_score,
+    utility_coverage_curve,
+)
 from ._plot import (
     FQCurveDisplay,
     PAConfusionMatrixDisplay,

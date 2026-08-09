@@ -14,6 +14,16 @@ Combined Classification Metrics
 
 .. autofunction:: skfb.metrics.predict_accept_confusion_matrix
 
+.. autofunction:: skfb.metrics.utility_coverage_curve
+
+.. autofunction:: skfb.metrics.utility_coverage_auc_score
+
+.. autofunction:: skfb.metrics.oracle_curve
+
+.. autofunction:: skfb.metrics.oracle_auc_score
+
+.. autofunction:: skfb.metrics.oracle_utility_gap_score
+
 .. autofunction:: skfb.metrics.fallback_quality_auc_score
 
 .. autofunction:: skfb.metrics.fallback_quality_curve
@@ -29,6 +39,9 @@ Plotting Utilities
 ------------------
 
 .. autoclass:: skfb.metrics.PAConfusionMatrixDisplay
+    :inherited-members: plot, from_estimator, from_predictions
+
+.. autoclass:: skfb.metrics.UCCurveDisplay
     :inherited-members: plot, from_estimator, from_predictions
 
 .. autoclass:: skfb.metrics.FQCurveDisplay
